@@ -78,7 +78,7 @@ export default function Files() {
 
   const leftPanel = (
     <div>
-      {breadcrumbItems.length > 0 ? <FileBreadcrumb></FileBreadcrumb> : 'File'}
+      {breadcrumbItems.length > 0 ? <FileBreadcrumb></FileBreadcrumb> : '文件'}
     </div>
   );
 

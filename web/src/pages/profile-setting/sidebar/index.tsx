@@ -26,7 +26,7 @@ const menuItems = [
       { icon: User, label: 'Profile', key: Routes.Profile },
       { icon: LayoutGrid, label: 'Team', key: Routes.Team },
       { icon: Banknote, label: 'Plan', key: Routes.Plan },
-      { icon: Banknote, label: 'MCP', key: Routes.Mcp },
+      // { icon: Banknote, label: 'MCP', key: Routes.Mcp },
     ],
   },
   {

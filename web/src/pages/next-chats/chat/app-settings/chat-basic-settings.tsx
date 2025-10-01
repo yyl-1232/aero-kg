@@ -29,14 +29,14 @@ export default function ChatBasicSetting() {
   const form = useFormContext();
 
   const languageOptions = [
-    { value: 'English', label: 'English' },
     { value: 'Chinese', label: 'Chinese' },
-    { value: 'Spanish', label: 'Spanish' },
-    { value: 'French', label: 'French' },
-    { value: 'German', label: 'German' },
-    { value: 'Japanese', label: 'Japanese' },
-    { value: 'Korean', label: 'Korean' },
-    { value: 'Vietnamese', label: 'Vietnamese' },
+    { value: 'English', label: 'English' },
+    // { value: 'Spanish', label: 'Spanish' },
+    // { value: 'French', label: 'French' },
+    // { value: 'German', label: 'German' },
+    // { value: 'Japanese', label: 'Japanese' },
+    // { value: 'Korean', label: 'Korean' },
+    // { value: 'Vietnamese', label: 'Vietnamese' },
   ];
 
   return (

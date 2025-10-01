@@ -11,6 +11,7 @@ const excludedTagParseMethods = [
   DocumentParserType.Table,
   DocumentParserType.KnowledgeGraph,
   DocumentParserType.Tag,
+  DocumentParserType.Manual,
 ];
 
 export const showTagItems = (parserId: DocumentParserType) => {
@@ -29,6 +30,7 @@ export const excludedParseMethods = [
   DocumentParserType.KnowledgeGraph,
   DocumentParserType.Qa,
   DocumentParserType.Tag,
+  DocumentParserType.Manual,
 ];
 
 export const showGraphRagItems = (parserId: DocumentParserType | undefined) => {

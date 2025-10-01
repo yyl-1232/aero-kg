@@ -26,6 +26,7 @@ export const excludedParseMethods = [
   DocumentParserType.KnowledgeGraph,
   DocumentParserType.Qa,
   DocumentParserType.Tag,
+  DocumentParserType.Manual,
 ];
 
 export const showRaptorParseConfiguration = (
@@ -38,6 +39,7 @@ export const excludedTagParseMethods = [
   DocumentParserType.Table,
   DocumentParserType.KnowledgeGraph,
   DocumentParserType.Tag,
+  DocumentParserType.Manual,
 ];
 
 export const showTagItems = (parserId: DocumentParserType) => {

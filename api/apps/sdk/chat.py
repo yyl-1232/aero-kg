@@ -74,7 +74,7 @@ def create(tenant_id):
         req["prompt_config"] = req.pop("prompt")
     # init
     req["id"] = get_uuid()
-    req["description"] = req.get("description", "A helpful Assistant")
+    req["description"] = req.get("description", "一个有用的对话助手")
     req["icon"] = req.get("avatar", "")
     req["top_n"] = req.get("top_n", 6)
     req["top_k"] = req.get("top_k", 1024)

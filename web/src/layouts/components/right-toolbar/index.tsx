@@ -23,11 +23,11 @@ const Circle = ({ children, ...restProps }: React.PropsWithChildren) => {
 };
 
 const handleGithubCLick = () => {
-  window.open('https://github.com/infiniflow/ragflow', 'target');
+  //window.open('https://github.com/infiniflow/ragflow', 'target');
 };
 
 const handleDocHelpCLick = () => {
-  window.open('https://ragflow.io/docs/dev/category/guides', 'target');
+  //window.open('https://ragflow.io/docs/dev/category/guides', 'target');
 };
 
 const RightToolBar = () => {
@@ -37,7 +37,7 @@ const RightToolBar = () => {
   const navigate = useNavigate();
 
   const {
-    data: { language = 'English' },
+    data: { language = '简体中文' },
   } = useFetchUserInfo();
 
   const handleItemClick: MenuProps['onClick'] = ({ key }) => {

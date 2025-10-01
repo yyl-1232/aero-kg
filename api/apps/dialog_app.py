@@ -51,7 +51,7 @@ def set_dialog():
             tenant_id=current_user.id,
             status=StatusEnum.VALID.value)
 
-    description = req.get("description", "A helpful dialog")
+    description = req.get("description", "一个有用的知识检索助手")
     icon = req.get("icon", "")
     top_n = req.get("top_n", 6)
     top_k = req.get("top_k", 1024)

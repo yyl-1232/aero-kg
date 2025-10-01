@@ -3,12 +3,17 @@ import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
 import { RAGFlowPagination } from '@/components/ui/ragflow-pagination';
 import { useFetchDialogList } from '@/hooks/use-chat-request';
+import { Routes } from '@/routes';
 import { pick } from 'lodash';
 import { Plus } from 'lucide-react';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChatCard } from './chat-card';
 import { useRenameChat } from './hooks/use-rename-chat';
+
+const IconMap = {
+  [Routes.Chats]: 'chat',
+};
 
 export default function ChatList() {
   const { data, setPagination, pagination, handleInputChange, searchString } =
@@ -38,7 +43,8 @@ export default function ChatList() {
     <section className="flex flex-col w-full flex-1">
       <div className="px-8 pt-8">
         <ListFilterBar
-          title="Chat apps"
+          title="聊天应用"
+          icon={IconMap[Routes.Chats]} // 传入图标
           onSearchChange={handleInputChange}
           searchString={searchString}
         >

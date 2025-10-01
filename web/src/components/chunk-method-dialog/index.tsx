@@ -36,10 +36,6 @@ import { ExcelToHtmlFormField } from '../excel-to-html-form-field';
 import { FormContainer } from '../form-container';
 import { LayoutRecognizeFormField } from '../layout-recognize-form-field';
 import { MaxTokenNumberFormField } from '../max-token-number-from-field';
-import {
-  UseGraphRagFormField,
-  showGraphRagItems,
-} from '../parse-configuration/graph-rag-form-fields';
 import RaptorFormFields, {
   showRaptorParseConfiguration,
 } from '../parse-configuration/raptor-form-fields';
@@ -316,12 +312,12 @@ export function ChunkMethodDialog({
                 <RaptorFormFields></RaptorFormFields>
               </FormContainer>
             )}
-            {showGraphRagItems(selectedTag as DocumentParserType) &&
-              useGraphRag && (
-                <FormContainer>
-                  <UseGraphRagFormField></UseGraphRagFormField>
-                </FormContainer>
-              )}
+            {/*{showGraphRagItems(selectedTag as DocumentParserType) &&*/}
+            {/*  useGraphRag && (*/}
+            {/*    <FormContainer>*/}
+            {/*      <UseGraphRagFormField></UseGraphRagFormField>*/}
+            {/*    </FormContainer>*/}
+            {/*  )}*/}
             {showEntityTypes && <EntityTypesFormField></EntityTypesFormField>}
           </form>
         </Form>

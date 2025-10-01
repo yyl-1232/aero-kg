@@ -10,7 +10,6 @@ import { useParams } from 'umi';
 import { AudioConfiguration } from './configuration/audio';
 import { BookConfiguration } from './configuration/book';
 import { EmailConfiguration } from './configuration/email';
-import { KnowledgeGraphConfiguration } from './configuration/knowledge-graph';
 import { LawsConfiguration } from './configuration/laws';
 import { ManualConfiguration } from './configuration/manual';
 import { NaiveConfiguration } from './configuration/naive';
@@ -38,7 +37,7 @@ const ConfigurationComponentMap = {
   [DocumentParserType.Audio]: AudioConfiguration,
   [DocumentParserType.Email]: EmailConfiguration,
   [DocumentParserType.Tag]: TagConfiguration,
-  [DocumentParserType.KnowledgeGraph]: KnowledgeGraphConfiguration,
+  //[DocumentParserType.KnowledgeGraph]: KnowledgeGraphConfiguration,
 };
 
 function EmptyComponent() {
@@ -60,6 +59,7 @@ export function ChunkMethodForm() {
   });
 
   const ConfigurationComponent = useMemo(() => {
+    // @ts-ignore
     return finalParserId
       ? ConfigurationComponentMap[finalParserId]
       : EmptyComponent;

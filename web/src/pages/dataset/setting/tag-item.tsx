@@ -148,8 +148,8 @@ export function TagItems() {
 
   return (
     <>
-      <TagSetItem></TagSetItem>
-      {Array.isArray(ids) && ids.length > 0 && <TopNTagsItem></TopNTagsItem>}
+      {/*<TagSetItem></TagSetItem>*/}
+      {/*{Array.isArray(ids) && ids.length > 0 && <TopNTagsItem></TopNTagsItem>}*/}
     </>
   );
 }

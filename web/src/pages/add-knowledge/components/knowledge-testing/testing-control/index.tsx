@@ -7,7 +7,6 @@ import { FormInstance } from 'antd/lib';
 import { LabelWordCloud } from './label-word-cloud';
 
 import { CrossLanguageItem } from '@/components/cross-language-item';
-import { UseKnowledgeGraphItem } from '@/components/use-knowledge-graph-item';
 import styles from './index.less';
 
 type FieldType = {
@@ -49,7 +48,7 @@ const TestingControl = ({
         <Form name="testing" layout="vertical" form={form}>
           <SimilaritySlider isTooltipShown></SimilaritySlider>
           <Rerank></Rerank>
-          <UseKnowledgeGraphItem filedName={['use_kg']}></UseKnowledgeGraphItem>
+          {/*<UseKnowledgeGraphItem filedName={['use_kg']}></UseKnowledgeGraphItem>*/}
           <CrossLanguageItem name={'cross_languages'}></CrossLanguageItem>
           <Card size="small" title={t('testText')}>
             <Form.Item<FieldType>

@@ -47,8 +47,8 @@ const HiddenFields = ['email', 'picture', 'audio'];
 
 export function useSelectChunkMethodList() {
   const parserList = useSelectParserList();
-
-  return parserList.filter((x) => !HiddenFields.some((y) => y === x.value));
+  return parserList.filter((x) => x.value === 'naive');
+  // return parserList.filter((x) => !HiddenFields.some((y) => y === x.value));
 }
 
 export function useSelectEmbeddingModelOptions() {

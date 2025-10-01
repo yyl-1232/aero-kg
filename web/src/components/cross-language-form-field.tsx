@@ -10,14 +10,14 @@ import { useFormContext } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 
 const Languages = [
-  'English',
   'Chinese',
-  'Spanish',
-  'French',
-  'German',
-  'Japanese',
-  'Korean',
-  'Vietnamese',
+  'English',
+  // 'Spanish',
+  // 'French',
+  // 'German',
+  // 'Japanese',
+  // 'Korean',
+  // 'Vietnamese',
 ];
 
 const options = Languages.map((x) => ({ label: x, value: x }));

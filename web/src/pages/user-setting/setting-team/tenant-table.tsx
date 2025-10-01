@@ -30,7 +30,10 @@ const TenantTable = () => {
       dataIndex: 'update_date',
       key: 'update_date',
       render(value) {
-        return formatDate(value);
+        const adjustedDate = new Date(value);
+        adjustedDate.setHours(adjustedDate.getHours() - 8);
+        return formatDate(adjustedDate);
+        // return formatDate(value);
       },
     },
     {

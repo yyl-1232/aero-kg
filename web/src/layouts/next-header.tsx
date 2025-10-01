@@ -1,31 +1,23 @@
 import { RAGFlowAvatar } from '@/components/ragflow-avatar';
 import { useTheme } from '@/components/theme-provider';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Segmented, SegmentedValue } from '@/components/ui/segmented';
-import { LanguageList, LanguageMap, ThemeEnum } from '@/constants/common';
+import { ThemeEnum } from '@/constants/common';
 import { useChangeLanguage } from '@/hooks/logic-hooks';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import { useNavigateWithFromState } from '@/hooks/route-hook';
 import { useFetchUserInfo } from '@/hooks/user-setting-hooks';
 import { Routes } from '@/routes';
-import { camelCase } from 'lodash';
 import {
-  ChevronDown,
-  CircleHelp,
-  Cpu,
+  // CircleHelp,
+  // Cpu,
   File,
-  Github,
+  // Github,
   House,
   Library,
   MessageSquareText,
   Moon,
-  Search,
+  // Search,
   Sun,
 } from 'lucide-react';
 import React, { useCallback, useMemo } from 'react';
@@ -33,9 +25,9 @@ import { useTranslation } from 'react-i18next';
 import { useLocation } from 'umi';
 import { BellButton } from './bell-button';
 
-const handleDocHelpCLick = () => {
-  window.open('https://ragflow.io/docs/dev/category/guides', 'target');
-};
+// const handleDocHelpCLick = () => {
+//   window.open('https://ragflow.io/docs/dev/category/guides', 'target');
+// };
 
 export function Header() {
   const { t } = useTranslation();
@@ -50,14 +42,14 @@ export function Header() {
     data: { language = 'English', avatar, nickname },
   } = useFetchUserInfo();
 
-  const handleItemClick = (key: string) => () => {
-    changeLanguage(key);
-  };
-
-  const items = LanguageList.map((x) => ({
-    key: x,
-    label: <span>{LanguageMap[x as keyof typeof LanguageMap]}</span>,
-  }));
+  // const handleItemClick = (key: string) => () => {
+  //   changeLanguage(key);
+  // };
+  //
+  // const items = LanguageList.map((x) => ({
+  //   key: x,
+  //   label: <span>{LanguageMap[x as keyof typeof LanguageMap]}</span>,
+  // }));
 
   const onThemeClick = React.useCallback(() => {
     setTheme(theme === ThemeEnum.Dark ? ThemeEnum.Light : ThemeEnum.Dark);
@@ -68,8 +60,8 @@ export function Header() {
       { path: Routes.Root, name: t('header.Root'), icon: House },
       { path: Routes.Datasets, name: t('header.dataset'), icon: Library },
       { path: Routes.Chats, name: t('header.chat'), icon: MessageSquareText },
-      { path: Routes.Searches, name: t('header.search'), icon: Search },
-      { path: Routes.Agents, name: t('header.flow'), icon: Cpu },
+      //{ path: Routes.Searches, name: t('header.search'), icon: Search },
+      //{ path: Routes.Agents, name: t('header.flow'), icon: Cpu },
       { path: Routes.Files, name: t('header.fileManager'), icon: File },
     ],
     [t],
@@ -114,6 +106,8 @@ export function Header() {
           className="size-10 mr-[12]"
           onClick={handleLogoClick}
         />
+        {/* GitHub图标隐藏 */}
+        {/*
         <a
           className="flex items-center gap-1.5 text-text-secondary"
           target="_blank"
@@ -121,15 +115,18 @@ export function Header() {
           rel="noreferrer"
         >
           <Github className="size-4" />
-          {/* <span className=" text-base">21.5k stars</span> */}
         </a>
+        */}
       </div>
       <Segmented
         options={options}
         value={pathname}
         onChange={handleChange}
+        activeClassName="bg-[#3B82F6] text-white border-none"
       ></Segmented>
       <div className="flex items-center gap-5 text-text-badge">
+        {/* 语言选择隐藏 */}
+        {/*
         <DropdownMenu>
           <DropdownMenuTrigger>
             <div className="flex items-center gap-1">
@@ -145,9 +142,13 @@ export function Header() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        */}
+        {/* 文档问号按钮隐藏 */}
+        {/*
         <Button variant={'ghost'} onClick={handleDocHelpCLick}>
           <CircleHelp />
         </Button>
+        */}
         <Button variant={'ghost'} onClick={onThemeClick}>
           {theme === 'light' ? <Sun /> : <Moon />}
         </Button>

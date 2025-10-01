@@ -37,7 +37,7 @@ export function ChatSettings({ switchSettingVisible }: ChatSettingsProps) {
     defaultValues: {
       name: '',
       icon: [],
-      language: 'English',
+      language: 'Chinese',
       description: '',
       kb_ids: [],
       prompt_config: {

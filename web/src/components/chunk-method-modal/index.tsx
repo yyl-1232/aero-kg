@@ -34,10 +34,6 @@ import LayoutRecognize from '../layout-recognize';
 import ParseConfiguration, {
   showRaptorParseConfiguration,
 } from '../parse-configuration';
-import {
-  UseGraphRagItem,
-  showGraphRagItems,
-} from '../parse-configuration/graph-rag-items';
 import styles from './index.less';
 
 interface IProps extends Omit<IModalManagerChildrenProps, 'showModal'> {
@@ -137,7 +133,7 @@ const ChunkMethodModal: React.FC<IProps> = ({
             use_graphrag: get(
               parserConfig,
               'graphrag.use_graphrag',
-              useGraphRag,
+              // useGraphRag,
             ),
           },
         },
@@ -147,7 +143,7 @@ const ChunkMethodModal: React.FC<IProps> = ({
     form,
     knowledgeDetails.parser_config,
     parserConfig,
-    useGraphRag,
+    // useGraphRag,
     visible,
   ]);
 
@@ -339,9 +335,9 @@ const ChunkMethodModal: React.FC<IProps> = ({
             <ParseConfiguration></ParseConfiguration>
           </DatasetConfigurationContainer>
         )}
-        {showGraphRagItems(selectedTag) && useGraphRag && (
-          <UseGraphRagItem></UseGraphRagItem>
-        )}
+        {/*{showGraphRagItems(selectedTag) && false && useGraphRag && (*/}
+        {/*  <UseGraphRagItem></UseGraphRagItem>*/}
+        {/*)}*/}
         {showEntityTypes && <EntityTypesItem></EntityTypesItem>}
       </Form>
     </Modal>
