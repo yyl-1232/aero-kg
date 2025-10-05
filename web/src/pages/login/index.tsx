@@ -5,21 +5,31 @@ import {
   useLoginChannels,
   useLoginWithChannel,
   useRegister,
+  useRequestVerificationCode,
+  useResetPassword,
 } from '@/hooks/login-hooks';
 import { useSystemConfig } from '@/hooks/system-hooks';
 import { rsaPsw } from '@/utils';
-import { Button, Checkbox, Form, Input } from 'antd';
+import { Button, Checkbox, Form, Input, message } from 'antd';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'umi';
 import styles from './index.less';
 import RightPanel from './right-panel';
 
+type PageState = 'login' | 'register' | 'forgot-password';
+
 const Login = () => {
-  const [title, setTitle] = useState<'login' | 'register'>('login');
+  // const [title, setTitle] = useState<'login' | 'register'>('login');
+  const [pageState, setPageState] = useState<PageState>('login');
+  const [showCodeStep, setShowCodeStep] = useState(false); // 找回密码第二步状态
+
   const navigate = useNavigate();
   const { login, loading: signLoading } = useLogin();
   const { register, loading: registerLoading } = useRegister();
+  const { requestVerificationCode, loading: VerificationLoading } =
+    useRequestVerificationCode();
+  const { resetPassword, loading: resetPasswordLoading } = useResetPassword();
   const { channels, loading: channelsLoading } = useLoginChannels();
   const { login: loginWithChannel, loading: loginWithChannelLoading } =
     useLoginWithChannel();
@@ -31,7 +41,9 @@ const Login = () => {
     signLoading ||
     registerLoading ||
     channelsLoading ||
-    loginWithChannelLoading;
+    loginWithChannelLoading ||
+    VerificationLoading ||
+    resetPasswordLoading;
   const registerEnabled = config?.registerEnabled !== 0;
 
   const [form] = Form.useForm();
@@ -50,29 +62,75 @@ const Login = () => {
     await loginWithChannel(channel);
   };
 
-  const changeTitle = () => {
-    if (title === 'login' && !registerEnabled) return;
-    setTitle((prev) => (prev === 'login' ? 'register' : 'login'));
+  const goLogin = () => {
+    setPageState('login');
+    setShowCodeStep(false);
+    form.resetFields();
+  };
+  const goRegister = () => {
+    setPageState('register');
+    setShowCodeStep(false);
+    form.resetFields();
+  };
+  const goForgot = () => {
+    setPageState('forgot-password');
+    setShowCodeStep(false);
+    form.resetFields();
   };
 
   const onCheck = async () => {
     try {
       const params = await form.validateFields();
-      const rsaPassWord = rsaPsw(params.password) as string;
+      // const rsaPassWord = rsaPsw(params.password) as string;
 
-      if (title === 'login') {
+      if (pageState === 'login') {
+        const rsaPassWord = rsaPsw(params.password) as string;
         const code = await login({
           email: params.email.trim(),
           password: rsaPassWord,
         });
         if (code === 0) navigate('/');
-      } else {
+      } else if (pageState === 'register') {
+        const rsaPassWord = rsaPsw(params.password) as string;
         const code = await register({
           nickname: params.nickname,
           email: params.email,
           password: rsaPassWord,
         });
-        if (code === 0) setTitle('login');
+        if (code === 0) setPageState('login');
+      } else if (pageState === 'forgot-password') {
+        if (!showCodeStep) {
+          // Step 1: 请求验证码
+          const respCode = await requestVerificationCode({
+            email: params.email.trim(),
+            nickname: params.nickname,
+          });
+          // && respCode.data?.verification_code
+          console.log('resp from backend:', respCode);
+          if (respCode.code === 0) {
+            console.log('respCode.data.data:', respCode.data.verification_code);
+            message.info(
+              `验证码（五分钟有效）: ${respCode.data.verification_code}`,
+            );
+            setShowCodeStep(true);
+          } else {
+            message.error('未找到用户，账户信息有误');
+          }
+        } else {
+          // Step 2: 提交验证码 + 新密码
+          const rsaPassWord = rsaPsw(params.new_password) as string;
+          const respCode = await resetPassword({
+            email: params.email.trim(),
+            code: params.code,
+            new_password: rsaPassWord,
+          });
+          if (respCode === 0) {
+            message.success('密码重置成功，即将进入登录界面...');
+            goLogin();
+          } else {
+            message.error('密码重置失败');
+          }
+        }
       }
     } catch (errorInfo) {
       console.log('Failed:', errorInfo);
@@ -94,11 +152,19 @@ const Login = () => {
       <div className={styles.loginContent}>
         <div className={styles.leftContainer}>
           <div className={styles.loginTitle}>
-            <div>{title === 'login' ? t('login') : t('register')}</div>
+            <div>
+              {pageState === 'login'
+                ? t('login')
+                : pageState === 'register'
+                  ? t('register')
+                  : t('forgotPassword')}
+            </div>
             <span>
-              {title === 'login'
+              {pageState === 'login'
                 ? t('loginDescription')
-                : t('registerDescription')}
+                : pageState === 'register'
+                  ? t('registerDescription')
+                  : t('forgotPasswordDescription')}
             </span>
           </div>
 
@@ -108,6 +174,7 @@ const Login = () => {
             name="dynamic_rule"
             style={{ maxWidth: 400, margin: '0 auto' }}
           >
+            {/* 邮箱：登录 / 注册 / 找回密码通用 */}
             <Form.Item
               {...formItemLayout}
               name="email"
@@ -116,8 +183,9 @@ const Login = () => {
             >
               <Input size="large" placeholder={t('emailPlaceholder')} />
             </Form.Item>
-
-            {title === 'register' && (
+            {/* 昵称：注册 / 找回密码第一步 */}
+            {(pageState === 'register' ||
+              (pageState === 'forgot-password' && !showCodeStep)) && (
               <Form.Item
                 {...formItemLayout}
                 name="nickname"
@@ -128,50 +196,100 @@ const Login = () => {
               </Form.Item>
             )}
 
-            <Form.Item
-              {...formItemLayout}
-              name="password"
-              label={t('passwordLabel')}
-              rules={[{ required: true, message: t('passwordPlaceholder') }]}
-            >
-              <Input.Password
-                size="large"
-                placeholder={t('passwordPlaceholder')}
-                onPressEnter={onCheck}
-              />
-            </Form.Item>
+            {/* 密码：登录 / 注册 */}
+            {(pageState === 'login' || pageState === 'register') && (
+              <Form.Item
+                {...formItemLayout}
+                name="password"
+                label={t('passwordLabel')}
+                rules={[{ required: true, message: t('passwordPlaceholder') }]}
+              >
+                <Input.Password
+                  size="large"
+                  placeholder={t('passwordPlaceholder')}
+                  onPressEnter={onCheck}
+                />
+              </Form.Item>
+            )}
 
-            {title === 'login' && (
+            {/* 找回密码 Step 2: 验证码 + 新密码 */}
+            {pageState === 'forgot-password' && showCodeStep && (
+              <>
+                <Form.Item
+                  {...formItemLayout}
+                  name="code"
+                  label={t('verificationCode')}
+                  rules={[
+                    {
+                      required: true,
+                      message: t('verificationCodePlaceholder'),
+                    },
+                  ]}
+                >
+                  <Input
+                    size="large"
+                    placeholder={t('verificationCodePlaceholder')}
+                  />
+                </Form.Item>
+
+                <Form.Item
+                  {...formItemLayout}
+                  name="new_password"
+                  label={t('newPasswordLabel')}
+                  rules={[
+                    { required: true, message: t('newPasswordPlaceholder') },
+                  ]}
+                >
+                  <Input.Password
+                    size="large"
+                    placeholder={t('newPasswordPlaceholder')}
+                    onPressEnter={onCheck}
+                  />
+                </Form.Item>
+              </>
+            )}
+
+            {/* 登录记住我 */}
+            {pageState === 'login' && (
               <Form.Item name="remember" valuePropName="checked">
                 <Checkbox>{t('rememberMe')}</Checkbox>
               </Form.Item>
             )}
 
+            {/* 页面切换链接 */}
             <div>
-              {title === 'login' && registerEnabled && (
+              {pageState === 'login' && registerEnabled && (
                 <div
                   style={{ display: 'flex', justifyContent: 'space-between' }}
                 >
                   <div>
                     {t('signInTip')}
-                    <Button type="link" onClick={changeTitle}>
+                    <Button type="link" onClick={goRegister}>
                       {t('signUp')}
                     </Button>
                   </div>
                   <div>
                     {t('forgotPasswordTip')}
-                    <Button type="link" onClick={changeTitle}>
+                    <Button type="link" onClick={goForgot}>
                       {t('forgotPassword')}
                     </Button>
                   </div>
                 </div>
               )}
 
-              {title === 'register' && (
+              {pageState === 'register' && (
                 <div>
                   {t('signUpTip')}
-                  <Button type="link" onClick={changeTitle}>
+                  <Button type="link" onClick={goLogin}>
                     {t('login')}
+                  </Button>
+                </div>
+              )}
+
+              {pageState === 'forgot-password' && (
+                <div>
+                  <Button type="link" onClick={goLogin}>
+                    ← {t('login')}
                   </Button>
                 </div>
               )}
@@ -184,10 +302,17 @@ const Login = () => {
               onClick={onCheck}
               loading={loading}
             >
-              {title === 'login' ? t('login') : t('continue')}
+              {pageState === 'login' && t('login')}
+              {pageState === 'register' && t('continue')}
+              {pageState === 'forgot-password' &&
+                !showCodeStep &&
+                t('getVerificationCode')}
+              {pageState === 'forgot-password' &&
+                showCodeStep &&
+                t('resetPassword')}
             </Button>
 
-            {title === 'login' && channels?.length > 0 && (
+            {pageState === 'login' && channels?.length > 0 && (
               <div className={styles.thirdPartyLoginButton}>
                 {channels.map((item) => (
                   <Button

@@ -115,6 +115,56 @@ export const useRegister = () => {
   return { data, loading, register: mutateAsync };
 };
 
+export const useRequestVerificationCode = () => {
+  const { t } = useTranslation();
+  const {
+    data,
+    isPending: loading,
+    mutateAsync,
+  } = useMutation({
+    mutationKey: ['requestVerificationCode'],
+    mutationFn: async (params: { email: string; nickname: string }) => {
+      const { data: resp = {} } =
+        await userService.requestVerificationCode(params);
+      // 不要在这里直接 return data.code
+      if (resp.code === 0) {
+        message.success(t('message.verificationSent'));
+      } else {
+        message.error(resp.message || t('message.userNotFound'));
+      }
+      return resp; // ← 返回整个对象
+    },
+  });
+
+  return { data, loading, requestVerificationCode: mutateAsync };
+};
+
+export const useResetPassword = () => {
+  const { t } = useTranslation();
+
+  const {
+    data,
+    isPending: loading,
+    mutateAsync,
+  } = useMutation({
+    mutationKey: ['resetPassword'],
+    mutationFn: async (params: {
+      email: string;
+      code: string;
+      new_password: string;
+    }) => {
+      const { data = {} } = await userService.resetPassword(params);
+      if (data.code === 0) {
+      } else {
+        message.error(data.message || t('message.passwordResetFailed'));
+      }
+      return data.code;
+    },
+  });
+
+  return { data, loading, resetPassword: mutateAsync };
+};
+
 export const useLogout = () => {
   const { t } = useTranslation();
   const {

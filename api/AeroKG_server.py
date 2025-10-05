@@ -20,7 +20,7 @@
 
 from api.utils.log_utils import init_root_logger
 from plugin import GlobalPluginManager
-init_root_logger("ragflow_server")
+init_root_logger("AeroKG_server")
 
 import logging
 import os
@@ -40,7 +40,7 @@ from api import utils
 
 from api.db.db_models import init_database_tables as init_web_db
 from api.db.init_data import init_web_data
-from api.versions import get_ragflow_version
+from api.versions import get_AeroKG_version
 from api.utils import show_configs
 from rag.settings import print_rag_settings
 from rag.utils.mcp_tool_call_conn import shutdown_all_mcp_sessions
@@ -48,7 +48,7 @@ from rag.utils.redis_conn import RedisDistributedLock
 
 stop_event = threading.Event()
 
-RAGFLOW_DEBUGPY_LISTEN = int(os.environ.get('RAGFLOW_DEBUGPY_LISTEN', "0"))
+AeroKG_DEBUGPY_LISTEN = int(os.environ.get('RAGFLOW_DEBUGPY_LISTEN', "0"))
 
 def update_progress():
     lock_value = str(uuid.uuid4())
@@ -77,15 +77,15 @@ def signal_handler(sig, frame):
 
 if __name__ == '__main__':
     logging.info(r"""
-        ____   ___    ______ ______ __
-       / __ \ /   |  / ____// ____// /____  _      __
-      / /_/ // /| | / / __ / /_   / // __ \| | /| / /
-     / _, _// ___ |/ /_/ // __/  / // /_/ /| |/ |/ /
-    /_/ |_|/_/  |_|\____//_/    /_/ \____/ |__/|__/
-
+        ___      ______   ____     ____     __  __    ______
+       /   |    / ____/  / __ \   / __ \   / / / /   / ____/
+      / /| |   / /___   / /_/ /  / / / /  / / / /   / / __ 
+     / ___ |  / ____/  / _, _/  / /_/ /  / /  \ \  / /_/ /
+    /_/  |_| /_____/  /_/ |_|   \____/  /_/    \_\ \____/
     """)
+
     logging.info(
-        f'RAGFlow version: {get_ragflow_version()}'
+        f'AeroKG version: {get_AeroKG_version()}'
     )
     logging.info(
         f'project base: {utils.file_utils.get_project_base_directory()}'
@@ -94,10 +94,10 @@ if __name__ == '__main__':
     settings.init_settings()
     print_rag_settings()
 
-    if RAGFLOW_DEBUGPY_LISTEN > 0:
-        logging.info(f"debugpy listen on {RAGFLOW_DEBUGPY_LISTEN}")
+    if AeroKG_DEBUGPY_LISTEN > 0:
+        logging.info(f"debugpy listen on {AeroKG_DEBUGPY_LISTEN}")
         import debugpy
-        debugpy.listen(("0.0.0.0", RAGFLOW_DEBUGPY_LISTEN))
+        debugpy.listen(("0.0.0.0", AeroKG_DEBUGPY_LISTEN))
 
     # init db
     init_web_db()
@@ -107,14 +107,14 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--version", default=False, help="RAGFlow version", action="store_true"
+        "--version", default=False, help="AeroKG version", action="store_true"
     )
     parser.add_argument(
         "--debug", default=False, help="debug mode", action="store_true"
     )
     args = parser.parse_args()
     if args.version:
-        print(get_ragflow_version())
+        print(get_AeroKG_version())
         sys.exit(0)
 
     RuntimeConfig.DEBUG = args.debug
@@ -154,7 +154,7 @@ if __name__ == '__main__':
 
     # start http server
     try:
-        logging.info("RAGFlow HTTP server start...")
+        logging.info("AeroKG HTTP server start...")
         run_simple(
             hostname=settings.HOST_IP,
             port=settings.HOST_PORT,

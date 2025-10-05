@@ -17,12 +17,13 @@ import json
 import logging
 import re
 import secrets
+import string
 from datetime import datetime
 
 from flask import redirect, request, session
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
-
+from redis import Redis
 from api import settings
 from api.apps.auth import get_auth_client
 from api.db import FileType, UserTenantRole
@@ -631,7 +632,7 @@ def user_register(user_id, user):
     FileService.insert(file)
     return UserService.query(email=user["email"])
 
-
+# 注册
 @manager.route("/register", methods=["POST"])  # noqa: F821
 @validate_request("nickname", "email", "password")
 def user_add():
@@ -722,6 +723,121 @@ def user_add():
         return get_json_result(
             data=False,
             message=f"User registration failure, error: {str(e)}",
+            code=settings.RetCode.EXCEPTION_ERROR,
+        )
+
+redis_client = Redis(host='localhost', port=6379, db=1, password='infini_rag_flow',decode_responses=True)
+# 找回密码
+@manager.route("/requestVerificationCode", methods=["POST"])
+@validate_request("email", "nickname")
+def request_verification_code():
+    """Request a verification code for password reset"""
+    req = request.json
+    email = req["email"].strip()
+    nickname = req["nickname"].strip()
+
+    # 1. 验证邮箱格式
+    if not re.match(r"^[\w\._-]+@([\w_-]+\.)+[\w-]{2,}$", email):
+        return get_json_result(
+            data=False,
+            message=f"Invalid email address: {email}",
+            code=settings.RetCode.OPERATING_ERROR,
+        )
+
+    # 2. 查找用户
+    users = UserService.query(email=email)
+    if not users:
+        return get_json_result(
+            data=False,
+            message="Email not found",
+            code=settings.RetCode.AUTHENTICATION_ERROR,
+        )
+
+    user = users[0]
+    if user.nickname != nickname:
+        return get_json_result(
+            data=False,
+            message="Email and nickname do not match",
+            code=settings.RetCode.AUTHENTICATION_ERROR,
+        )
+
+    # 3. 生成验证码
+    verification_code = ''.join(secrets.choice(string.digits) for _ in range(6))  # 6位数字验证码
+
+    # 4. 存入 Redis，5 分钟过期
+    redis_key = f"reset_pwd:{email}"
+    redis_client.set(redis_key, verification_code, ex=300)  # 300秒 = 5分钟
+
+    # 5. TODO: 可在这里通过邮件/短信发送验证码
+    logging.info(f"Verification code for {email}: {verification_code}")
+
+    return get_json_result(
+        data={"verification_code": verification_code},  # 仅用于调试
+        message="Verification code sent (for testing)",
+        code=0
+    )
+
+
+@manager.route("/resetPassword", methods=["POST"])
+@validate_request("email", "code", "new_password")
+def reset_password():
+    """
+    Reset user password after verifying the verification code stored in Redis.
+    """
+    req = request.json
+    email = req["email"]
+    code = req["code"]
+    new_password = req["new_password"]
+
+    # 验证邮箱格式
+    if not re.match(r"^[\w\._-]+@([\w_-]+\.)+[\w-]{2,}$", email):
+        return get_json_result(
+            data=False,
+            message=f"Invalid email address: {email}!",
+            code=settings.RetCode.OPERATING_ERROR,
+        )
+
+    # 检查用户是否存在
+    users = UserService.query(email=email)
+    if not users:
+        return get_json_result(
+            data=False,
+            message="Email not found!",
+            code=settings.RetCode.AUTHENTICATION_ERROR,
+        )
+    user = users[0]
+
+    # 从 Redis 获取验证码
+    redis_key = f"reset_pwd:{email}"
+    stored_code = redis_client.get(redis_key)
+    if not stored_code or stored_code != code:
+        return get_json_result(
+            data=False,
+            message="Invalid or expired verification code!",
+            code=settings.RetCode.AUTHENTICATION_ERROR,
+        )
+
+    # 更新用户密码
+    try:
+        decrypted_password = generate_password_hash(decrypt(new_password))
+        user_dict = {
+            "password": decrypted_password
+        }
+        UserService.update_by_id(user.id, user_dict)
+
+        # 删除 Redis 中的验证码，避免重复使用
+        redis_client.delete(redis_key)
+
+        return get_json_result(
+            data=True,
+            message="Password reset successfully!",
+            code=settings.RetCode.SUCCESS
+        )
+    except Exception as e:
+        logging.exception(e)
+        return get_json_result(
+            data=False,
+            message="Password reset failed!",
             code=settings.RetCode.EXCEPTION_ERROR,
         )
 

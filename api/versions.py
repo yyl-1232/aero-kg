@@ -20,7 +20,7 @@ import subprocess
 RAGFLOW_VERSION_INFO = "unknown"
 
 
-def get_ragflow_version() -> str:
+def get_AeroKG_version() -> str:
     global RAGFLOW_VERSION_INFO
     if RAGFLOW_VERSION_INFO != "unknown":
         return RAGFLOW_VERSION_INFO

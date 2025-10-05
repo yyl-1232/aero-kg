@@ -8,6 +8,8 @@ export default {
   login: `${api_host}/user/login`,
   logout: `${api_host}/user/logout`,
   register: `${api_host}/user/register`,
+  requestVerificationCode: `${api_host}/user/requestVerificationCode`,
+  resetPassword: `${api_host}/user/resetPassword`,
   setting: `${api_host}/user/setting`,
   user_info: `${api_host}/user/info`,
   tenant_info: `${api_host}/user/tenant_info`,

@@ -24,6 +24,8 @@ const {
   createSystemToken,
   getSystemConfig,
   setLangfuseConfig,
+  requestVerificationCode,
+  resetPassword,
 } = api;
 
 const methods = {
@@ -37,6 +39,14 @@ const methods = {
   },
   register: {
     url: register,
+    method: 'post',
+  },
+  requestVerificationCode: {
+    url: requestVerificationCode,
+    method: 'post',
+  },
+  resetPassword: {
+    url: resetPassword,
     method: 'post',
   },
   setting: {
