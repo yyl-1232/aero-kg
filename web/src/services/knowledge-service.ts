@@ -42,7 +42,7 @@ const {
 } = api;
 
 const methods = {
-  // 知识库管理
+  // 文档库管理
   createKb: {
     url: create_kb,
     method: 'post',

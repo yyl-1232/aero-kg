@@ -5434,6 +5434,7 @@ dependencies = [
     { name = "qianfan" },
     { name = "ranx" },
     { name = "readability-lxml" },
+    { name = "redis" },
     { name = "replicate" },
     { name = "requests" },
     { name = "roman-numbers" },
@@ -5589,6 +5590,7 @@ requires-dist = [
     { name = "qianfan", specifier = "==0.4.6" },
     { name = "ranx", specifier = "==0.3.20" },
     { name = "readability-lxml", specifier = "==0.8.1" },
+    { name = "redis", specifier = "==6.4.0" },
     { name = "replicate", specifier = "==0.31.0" },
     { name = "requests", specifier = "==2.32.2" },
     { name = "roman-numbers", specifier = "==1.0.2" },
@@ -5700,6 +5702,18 @@ dependencies = [
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/a4/b9/6b7c390440ec23bf5fdf33e76d6c3b697a788b983c11cb2739d6541835d6/readerwriterlock-1.0.9.tar.gz", hash = "sha256:b7c4cc003435d7a8ff15b312b0a62a88d9800ba6164af88991f87f8b748f9bea" }
 wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/c2/5a/2f2e7fc026d5e64b5408aa3fbe0296a6407b8481196cae4daacacb3a3ae0/readerwriterlock-1.0.9-py3-none-any.whl", hash = "sha256:8c4b704e60d15991462081a27ef46762fea49b478aa4426644f2146754759ca7" },
+]
+
+[[package]]
+name = "redis"
+version = "6.4.0"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
+dependencies = [
+    { name = "async-timeout", marker = "python_full_version < '3.11.3'" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/0d/d6/e8b92798a5bd67d659d51a18170e91c16ac3b59738d91894651ee255ed49/redis-6.4.0.tar.gz", hash = "sha256:b01bc7282b8444e28ec36b261df5375183bb47a07eb9c603f284e89cbc5ef010" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/e8/02/89e2ed7e85db6c93dfa9e8f691c5087df4e3551ab39081a4d7c6d1f90e05/redis-6.4.0-py3-none-any.whl", hash = "sha256:f0544fa9604264e9464cdf4814e7d4830f74b165d52f2a330a760a88dd248b7f" },
 ]
 
 [[package]]

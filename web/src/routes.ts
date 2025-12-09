@@ -56,6 +56,10 @@ const routes = [
     layout: false,
   },
   {
+    path: Routes.KnowledgeGraph,
+    component: '@/pages/knowledge-graph',
+  },
+  {
     path: '/chat/share',
     component: '@/pages/chat/share',
     layout: false,
@@ -167,6 +171,35 @@ const routes = [
       {
         path: Routes.Datasets,
         component: `@/pages${Routes.Datasets}`,
+      },
+    ],
+  },
+  {
+    path: Routes.KnowledgeGraph,
+    layout: false,
+    component: '@/layouts/next',
+    routes: [
+      {
+        path: Routes.KnowledgeGraph,
+        component: `@/pages${Routes.KnowledgeGraph}`,
+      },
+      {
+        path: `${Routes.KnowledgeGraph}/:id`,
+        component: `@/pages${Routes.KnowledgeGraph}/detail`,
+        routes: [
+          {
+            path: 'upload',
+            component: `@/pages${Routes.KnowledgeGraph}/detail/upload`,
+          },
+          {
+            path: 'view',
+            component: `@/pages${Routes.KnowledgeGraph}/detail/view`,
+          },
+          {
+            path: 'configuration',
+            component: `@/pages${Routes.KnowledgeGraph}/detail/configuration`,
+          },
+        ],
       },
     ],
   },

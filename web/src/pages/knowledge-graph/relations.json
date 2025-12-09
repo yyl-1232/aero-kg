@@ -1,0 +1,77 @@
+[
+  {
+    "head_entity_id": 1,
+    "tail_entity_id": 11,
+    "relation": "属于领域"
+  },
+  {
+    "head_entity_id": 1,
+    "tail_entity_id": 12,
+    "relation": "具有特征"
+  },
+  {
+    "head_entity_id": 1,
+    "tail_entity_id": 17,
+    "relation": "应用于"
+  },
+  {
+    "head_entity_id": 2,
+    "tail_entity_id": 4,
+    "relation": "暴露于"
+  },
+  {
+    "head_entity_id": 2,
+    "tail_entity_id": 7,
+    "relation": "需要配置"
+  },
+  {
+    "head_entity_id": 3,
+    "tail_entity_id": 8,
+    "relation": "采用推进"
+  },
+  {
+    "head_entity_id": 3,
+    "tail_entity_id": 10,
+    "relation": "采用布局"
+  },
+  {
+    "head_entity_id": 5,
+    "tail_entity_id": 4,
+    "relation": "面临环境"
+  },
+  {
+    "head_entity_id": 7,
+    "tail_entity_id": 6,
+    "relation": "依赖材料"
+  },
+  {
+    "head_entity_id": 13,
+    "tail_entity_id": 1,
+    "relation": "服务对象"
+  },
+  {
+    "head_entity_id": 13,
+    "tail_entity_id": 20,
+    "relation": "约束于"
+  },
+  {
+    "head_entity_id": 15,
+    "tail_entity_id": 11,
+    "relation": "验证理论"
+  },
+  {
+    "head_entity_id": 16,
+    "tail_entity_id": 19,
+    "relation": "用于标定"
+  },
+  {
+    "head_entity_id": 18,
+    "tail_entity_id": 4,
+    "relation": "分析环境"
+  },
+  {
+    "head_entity_id": 18,
+    "tail_entity_id": 6,
+    "relation": "评估材料"
+  }
+]

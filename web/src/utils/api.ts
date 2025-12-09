@@ -16,7 +16,12 @@ export default {
   set_tenant_info: `${api_host}/user/set_tenant_info`,
   login_channels: `${api_host}/user/login/channels`,
   login_channel: (channel: string) => `${api_host}/user/login/${channel}`,
-
+  // knowledge graph
+  graph_create: `${api_host}/graph/create`,
+  graph_list: `${api_host}/graph/graph_list`,
+  graph_update: `${api_host}/graph/update`,
+  graph_delete: (graphId: string) => `${api_host}/graph/${graphId}/delete`,
+  graph_detail: (graphId: string) => `${api_host}/graph/${graphId}`,
   // team
   addTenantUser: (tenantId: string) => `${api_host}/tenant/${tenantId}/user`,
   listTenantUser: (tenantId: string) =>

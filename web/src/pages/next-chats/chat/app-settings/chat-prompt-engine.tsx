@@ -12,7 +12,6 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Textarea } from '@/components/ui/textarea';
-import { UseKnowledgeGraphFormField } from '@/components/use-knowledge-graph-item';
 import { useTranslate } from '@/hooks/common-hooks';
 import { useFormContext } from 'react-hook-form';
 import { DynamicVariableForm } from './dynamic-variable';
@@ -42,7 +41,7 @@ export function ChatPromptEngine() {
         name={'prompt_config.refine_multiturn'}
         label={t('multiTurn')}
       ></SwitchFormField>
-      <UseKnowledgeGraphFormField name="prompt_config.use_kg"></UseKnowledgeGraphFormField>
+      {/*<UseKnowledgeGraphFormField name="prompt_config.use_kg"></UseKnowledgeGraphFormField>*/}
       <RerankFormFields></RerankFormFields>
       <DynamicVariableForm></DynamicVariableForm>
     </div>

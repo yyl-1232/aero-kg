@@ -17,7 +17,7 @@ import {
   Library,
   MessageSquareText,
   Moon,
-  // Search,
+  Search,
   Sun,
 } from 'lucide-react';
 import React, { useCallback, useMemo } from 'react';
@@ -59,6 +59,11 @@ export function Header() {
     () => [
       { path: Routes.Root, name: t('header.Root'), icon: House },
       { path: Routes.Datasets, name: t('header.dataset'), icon: Library },
+      {
+        path: Routes.KnowledgeGraph,
+        name: t('header.knowledgeGraph'),
+        icon: Search,
+      },
       { path: Routes.Chats, name: t('header.chat'), icon: MessageSquareText },
       //{ path: Routes.Searches, name: t('header.search'), icon: Search },
       //{ path: Routes.Agents, name: t('header.flow'), icon: Cpu },

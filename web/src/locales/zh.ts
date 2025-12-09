@@ -78,7 +78,8 @@ export default {
       review: '',
     },
     header: {
-      knowledgeBase: '知识库',
+      knowledgeBase: '文档库',
+      knowledgeGraph: '知识图谱',
       chat: '聊天',
       register: '注册',
       signin: '登录',
@@ -89,17 +90,27 @@ export default {
       flow: '智能体',
       search: '搜索',
       welcome: '欢迎来到',
-      dataset: '数据集',
+      dataset: '文档库',
     },
     knowledgeList: {
       welcome: '欢迎回来',
-      description: '今天我们要使用哪个知识库？',
-      createKnowledgeBase: '创建知识库',
+      description: '今天我们要从哪里开始？',
+      createKnowledgeBase: '创建文档库',
       name: '名称',
       namePlaceholder: '请输入名称',
       doc: '文档',
       searchKnowledgePlaceholder: '搜索',
       noMoreData: '没有更多数据了',
+    },
+    knowledgeGraphList: {
+      welcome: '知识图谱',
+      createKnowledgeGraph: '创建知识图谱',
+      name: '名称',
+      namePlaceholder: '请输入名称',
+      description: '描述',
+      descriptionPlaceholder: '请输入描述',
+      noMoreData: '没有更多数据了',
+      // ... 其他需要的翻译
     },
     knowledgeDetails: {
       created: '创建于',
@@ -112,7 +123,7 @@ export default {
       retrievalTestingDescription:
         '进行检索测试，检查 AeroKG 是否能够为大语言模型（LLM）恢复预期的内容。',
       Parse: '解析',
-      dataset: '数据集',
+      dataset: '文档库',
       testing: '检索测试',
       configuration: '配置',
       knowledgeGraph: '知识图谱',
@@ -199,7 +210,7 @@ export default {
       autoKeywords: '自动关键词提取',
       autoKeywordsTip: `自动为每个文本块中提取 N 个关键词，用以提升查询精度。请注意：该功能采用“系统模型设置”中设置的默认聊天模型提取关键词，因此也会产生更多 Token 消耗。另外，你也可以手动更新生成的关键词。`,
       autoQuestions: '自动问题提取',
-      autoQuestionsTip: `利用“系统模型设置”中设置的 chat model 对知识库的每个文本块提取 N 个问题以提高其排名得分。请注意，开启后将消耗额外的 token。您可以在块列表中查看、编辑结果。如果自动问题提取发生错误，不会妨碍整个分块过程，只会将空结果添加到原始文本块。`,
+      autoQuestionsTip: `利用“系统模型设置”中设置的 chat model 对文档库的每个文本块提取 N 个问题以提高其排名得分。请注意，开启后将消耗额外的 token。您可以在块列表中查看、编辑结果。如果自动问题提取发生错误，不会妨碍整个分块过程，只会将空结果添加到原始文本块。`,
       redo: '是否清空已有 {{chunkNum}}个 chunk？',
       setMetaData: '设置元数据',
       pleaseInputJson: '请输入JSON',
@@ -230,9 +241,9 @@ export default {
       theDocumentBeingParsedCannotBeDeleted: '正在解析的文档不能被删除',
     },
     knowledgeConfiguration: {
-      titleDescription: '在这里更新您的知识库详细信息，尤其是切片方法。',
-      name: '知识库名称',
-      photo: '知识库图片',
+      titleDescription: '在这里更新您的文档库详细信息，尤其是切片方法。',
+      name: '文档库名称',
+      photo: '文档库图片',
       photoTip: '你可以上传4MB的文件',
       description: '描述',
       language: '文档语言',
@@ -243,9 +254,9 @@ export default {
       chunkTokenNumber: '建议文本块大小',
       chunkTokenNumberMessage: '块Token数是必填项',
       embeddingModelTip:
-        '知识库采用的默认嵌入模型。 一旦知识库内已经产生了文本块后，你将无法更改默认的嵌入模型，除非删除知识库内的所有文本块。',
+        '文档库采用的默认嵌入模型。 一旦文档库内已经产生了文本块后，你将无法更改默认的嵌入模型，除非删除文档库内的所有文本块。',
       permissionsTip:
-        '如果把知识库权限设为“团队”，则所有团队成员都可以操作该知识库。',
+        '如果把文档库权限设为“团队”，则所有团队成员都可以操作该文档库。',
       chunkTokenNumberTip:
         '建议的生成文本块的 token 数阈值。如果切分得到的小文本段 token 数达不到这一阈值就会不断与之后的文本段合并，直至再合并下一个文本段会超过这一阈值为止，此时产生一个最终文本块。如果系统在切分文本段时始终没有遇到文本分段标识符，即便文本段 token 数已经超过这一阈值，系统也不会生成新文本块。',
       chunkMethod: '切片方法',
@@ -264,7 +275,7 @@ export default {
       methodExamplesDescription:
         '为帮助您更好地理解，我们提供了相关截图供您参考。',
       dialogueExamplesTitle: '对话示例',
-      methodEmpty: '这将显示知识库类别的可视化解释',
+      methodEmpty: '这将显示文档库类别的可视化解释',
       book: `<p>支持的文件格式为<b>DOCX</b>、<b>PDF</b>、<b>TXT</b>。</p><p>
       由于一本书很长，并不是所有部分都有用，如果是 PDF，
       请为每本书设置<i>页面范围</i>，以消除负面影响并节省分析计算时间。</p>`,
@@ -354,7 +365,7 @@ export default {
 <p>接下来，将分块传输到 LLM 以提取知识图谱和思维导图的节点和关系。</p>
 
 注意您需要指定的条目类型。</p>`,
-      tag: `<p>使用“Tag”分块方法的知识库用作标签集.其他知识库可以把标签集当中的标签按照相似度匹配到自己对应的文本块中，对这些知识库的查询也将根据此标签集对自己进行标记。</p>
+      tag: `<p>使用“Tag”分块方法的文档库用作标签集.其他文档库可以把标签集当中的标签按照相似度匹配到自己对应的文本块中，对这些文档库的查询也将根据此标签集对自己进行标记。</p>
 <p>标签集<b>不会</b>直接参与 RAG 检索过程。</p>
 <p>标签集中的每个文本分块是都是相互独立的标签和标签描述的文本对。</p>
 
@@ -387,7 +398,7 @@ export default {
       maxClusterTip: '最多可创建的聚类数。',
       entityTypes: '实体类型',
       pageRank: '页面排名',
-      pageRankTip: `知识库检索时，你可以为特定知识库设置较高的 PageRank 分数，该知识库中匹配文本块的混合相似度得分会自动叠加 PageRank 分数，从而提升排序权重。`,
+      pageRankTip: `文档库检索时，你可以为特定文档库设置较高的 PageRank 分数，该文档库中匹配文本块的混合相似度得分会自动叠加 PageRank 分数，从而提升排序权重。`,
       tagName: '标签',
       frequency: '频次',
       searchTags: '搜索标签',
@@ -396,13 +407,13 @@ export default {
       tagSet: '标签集',
       topnTags: 'Top-N 标签',
       tagSetTip: `
-      <p> 请选择一个或多个标签集或标签知识库，用于对知识库中的每个文本块进行标记。</p>
+      <p> 请选择一个或多个标签集或标签文档库，用于对文档库中的每个文本块进行标记。</p>
       <p>对这些文本块的查询也将自动关联相应标签。 </p>
       <p>此功能基于文本相似度，能够为数据集的文本块批量添加更多领域知识，从而显著提高检索准确性。该功能还能提升大量文本块的操作效率。</p>
       <p>为了更好地理解标签集的作用，以下是标签集和关键词之间的主要区别：</p>
       <ul>
       <li>标签集是一个由用户定义和管理的封闭集，而自动生成的关键词属于开放集合。 </li>
-      <li>在给你的知识库文本块批量打标签之前，你需要先生成标签集作为样本。 </li>
+      <li>在给你的文档库文本块批量打标签之前，你需要先生成标签集作为样本。 </li>
       <li>自动关键词提取功能中的关键词由 LLM 生成，此过程相对耗时，并且会产生一定的 Token 消耗。 </li>
       </ul>
       <p> </p>
@@ -411,7 +422,7 @@ export default {
       addTag: '增加标签',
       useGraphRag: '提取知识图谱',
       useGraphRagTip:
-        '基于知识库内所有切好的文本块构建知识图谱，用以提升多跳和复杂问题回答的正确率。请注意：构建知识图谱将消耗大量 token 和时间。',
+        '基于文档库内所有切好的文本块构建知识图谱，用以提升多跳和复杂问题回答的正确率。请注意：构建知识图谱将消耗大量 token 和时间。',
       graphRagMethod: '方法',
       graphRagMethodTip: `Light：实体和关系提取提示来自 GitHub - HKUDS/LightRAG：“LightRAG：简单快速的检索增强生成”<br>
 General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于图的模块化检索增强生成 (RAG) 系统`,
@@ -458,27 +469,27 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
       send: '发送',
       sendPlaceholder: '给助理发送消息...',
       chatConfiguration: '聊天配置',
-      chatConfigurationDescription: '为你的知识库配置专属聊天助手！ 💕',
+      chatConfigurationDescription: '为你的文档库配置专属聊天助手！ 💕',
       assistantName: '助理姓名',
       assistantNameMessage: '助理姓名是必填项',
       namePlaceholder: '例如 贾维斯简历',
       assistantAvatar: '助理头像',
       language: '语言',
       emptyResponse: '空回复',
-      emptyResponseTip: `如果在知识库中没有检索到用户的问题，它将使用它作为答案。 如果您希望 LLM 在未检索到任何内容时提出自己的意见，请将此留空。`,
-      emptyResponseMessage: `当知识库中未检索到任何相关信息时，将触发空响应。由于未选择任何知识库，因此请清除“空响应”。`,
+      emptyResponseTip: `如果在文档库中没有检索到用户的问题，它将使用它作为答案。 如果您希望 LLM 在未检索到任何内容时提出自己的意见，请将此留空。`,
+      emptyResponseMessage: `当文档库中未检索到任何相关信息时，将触发空响应。由于未选择任何文档库，因此请清除“空响应”。`,
       setAnOpener: '设置开场白',
       setAnOpenerInitial: `你好！ 我是你的助理，有什么可以帮到你的吗？`,
       setAnOpenerTip: '您想如何欢迎您的客户？',
-      knowledgeBases: '知识库',
+      knowledgeBases: '文档库',
       knowledgeBasesMessage: '请选择',
       knowledgeBasesTip:
-        '选择关联的知识库。新建或空知识库不会在下拉菜单中显示。',
+        '选择关联的文档库。新建或空文档库不会在下拉菜单中显示。',
       system: '系统提示词',
-      systemInitialValue: `你是一个智能助手，请总结知识库的内容来回答问题，请列举知识库中的数据详细回答。当所有知识库内容都与问题无关时，你的回答必须包括“知识库中未找到您要的答案！”这句话。回答需要考虑聊天历史。
-        以下是知识库：
+      systemInitialValue: `你是一个智能助手，请总结文档库的内容来回答问题，请列举文档库中的数据详细回答。当所有文档库内容都与问题无关时，你的回答必须包括“文档库中未找到您要的答案！”这句话。回答需要考虑聊天历史。
+        以下是文档库：
         {knowledge}
-        以上是知识库。`,
+        以上是文档库。`,
       systemMessage: '请输入',
       systemTip:
         '当LLM回答问题时，你需要LLM遵循的说明，比如角色设计、答案长度和答案语言等。如果您的模型原生支持在问答中推理，可以通过 //no_thinking 关闭自动推理。',
@@ -486,7 +497,7 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
       topNTip: `并非所有相似度得分高于“相似度阈值”的块都会被提供给大语言模型。 LLM 只能看到这些“Top N”块。`,
       variable: '变量',
       variableTip: `你可以通过对话 API，并配合变量设置来动态调整大模型的系统提示词。
-      {knowledge}为系统预留变量，代表从指定知识库召回的文本块。
+      {knowledge}为系统预留变量，代表从指定文档库召回的文本块。
       “系统提示词”中的所有变量都必须用大括号{}括起来。`,
       add: '新增',
       key: '关键字',
@@ -567,21 +578,21 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
       answerTitle: '智能回答',
       multiTurn: '多轮对话优化',
       multiTurnTip:
-        '在多轮对话的中，对去知识库查询的问题进行优化。会调用大模型额外消耗token。',
+        '在多轮对话的中，对去文档库查询的问题进行优化。会调用大模型额外消耗token。',
       howUseId: '如何使用聊天ID？',
       description: '助理描述',
       descriptionPlaceholder:
         '例如 你是一个专业的简历助手，只能回答简历的问题。',
       useKnowledgeGraph: '使用知识图谱',
       useKnowledgeGraphTip:
-        '是否检索与所选知识库对应的知识图谱相关文本块，以处理复杂的多跳问题？这一过程将涉及对实体、关系和社区报告文本块的多次检索，会显著延长检索时间。',
+        '是否检索与所选文档库对应的知识图谱相关文本块，以处理复杂的多跳问题？这一过程将涉及对实体、关系和社区报告文本块的多次检索，会显著延长检索时间。',
       keyword: '关键词分析',
       keywordTip: `应用 LLM 分析用户的问题，提取在相关性计算中要强调的关键词。对长查询效果较好，但会延长响应时间。`,
       reasoning: '推理',
       reasoningTip:
         '在问答过程中是否启用推理工作流，例如Deepseek-R1或OpenAI o1等模型所采用的方式。启用后，该功能允许模型访问外部知识，并借助思维链推理等技术逐步解决复杂问题。通过将问题分解为可处理的步骤，这种方法增强了模型提供准确回答的能力，从而在需要逻辑推理和多步思考的任务上表现更优。',
       tavilyApiKeyTip:
-        '如果 API 密钥设置正确，它将利用 Tavily 进行网络搜索作为知识库的补充。',
+        '如果 API 密钥设置正确，它将利用 Tavily 进行网络搜索作为文档库的补充。',
       tavilyApiKeyMessage: '请输入你的 Tavily API Key',
       tavilyApiKeyHelp: '如何获取？',
       crossLanguage: '跨语言搜索',
@@ -656,19 +667,19 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
       modify: '修改',
       systemModelSettings: '设置默认模型',
       chatModel: '聊天模型',
-      chatModelTip: '所有新创建的知识库都会使用默认的聊天模型。',
+      chatModelTip: '所有新创建的文档库都会使用默认的聊天模型。',
       ttsModel: 'TTS模型',
       ttsModelTip:
         '默认的tts模型会被用于在对话过程中请求语音生成时使用。请确认你的模型供应商是否提供该模型。',
       embeddingModel: '嵌入模型',
       embeddingModelTip:
-        '所有新创建的知识库使用的默认嵌入模型。如未显示可选模型，请检查你的模型设置；请确认你的模型供应商是否提供该模型。',
+        '所有新创建的文档库使用的默认嵌入模型。如未显示可选模型，请检查你的模型设置；请确认你的模型供应商是否提供该模型。',
       img2txtModel: 'Img2txt模型',
       img2txtModelTip:
-        '所有新创建的知识库都将使用默认的 img2txt 模型。 它可以描述图片或视频。如未显示可选模型，请确认你的模型供应商是否提供该模型。',
+        '所有新创建的文档库都将使用默认的 img2txt 模型。 它可以描述图片或视频。如未显示可选模型，请确认你的模型供应商是否提供该模型。',
       sequence2txtModel: 'Speech2txt模型',
       sequence2txtModelTip:
-        '所有新创建的知识库都将使用默认的 ASR 模型。 使用此模型将语音翻译为相应的文本。如未显示可选模型，请确认你的模型供应商是否提供该模型。',
+        '所有新创建的文档库都将使用默认的 ASR 模型。 使用此模型将语音翻译为相应的文本。如未显示可选模型，请确认你的模型供应商是否提供该模型。',
       rerankModel: 'Rerank模型',
       rerankModelTip: `默认的 reranking 模型。如未显示可选模型，请确认你的模型供应商是否提供该模型。`,
       workspace: '工作空间',
@@ -806,10 +817,10 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
     fileManager: {
       name: '名称',
       uploadDate: '上传日期',
-      knowledgeBase: '知识库',
+      knowledgeBase: '文档库',
       size: '大小',
       action: '操作',
-      addToKnowledge: '链接知识库',
+      addToKnowledge: '链接文档库',
       pleaseSelect: '请选择',
       newFolder: '新建文件夹',
       uploadFile: '上传文件',
@@ -945,16 +956,16 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
       title: 'ID：',
       beginDescription: '这是流程开始的地方',
       answerDescription: `该组件用作机器人与人类之间的接口。它接收用户的输入并显示机器人的计算结果。`,
-      retrievalDescription: `此组件用于从知识库中检索相关信息。选择知识库。如果没有检索到任何内容，将返回“空响应”。`,
+      retrievalDescription: `此组件用于从文档库中检索相关信息。选择文档库。如果没有检索到任何内容，将返回“空响应”。`,
       generateDescription: `此组件用于调用LLM生成文本，请注意提示的设置。`,
       categorizeDescription: `此组件用于对文本进行分类。请指定类别的名称、描述和示例。每个类别都指向不同的下游组件。`,
       relevantDescription: `该组件用来判断upstream的输出是否与用户最新的问题相关，‘是’代表相关，‘否’代表不相关。`,
-      rewriteQuestionDescription: `此组件用于细化用户的提问。通常，当用户的原始提问无法从知识库中检索到相关信息时，此组件可帮助您将问题更改为更符合知识库表达方式的适当问题。`,
+      rewriteQuestionDescription: `此组件用于细化用户的提问。通常，当用户的原始提问无法从文档库中检索到相关信息时，此组件可帮助您将问题更改为更符合文档库表达方式的适当问题。`,
       messageDescription:
         '该组件用来返回工作流最后产生的数据内容和原先设置的文本内容。',
       keywordDescription: `该组件用于从用户的问题中提取关键词。Top N指定需要提取的关键词数量。`,
       switchDescription: `该组件用于根据前面组件的输出评估条件，并相应地引导执行流程。通过定义各种情况并指定操作，或在不满足条件时采取默认操作，实现复杂的分支逻辑。`,
-      wikipediaDescription: `此组件用于从 https://www.wikipedia.org/ 获取搜索结果。通常，它作为知识库的补充。Top N 指定您需要调整的搜索结果数量。`,
+      wikipediaDescription: `此组件用于从 https://www.wikipedia.org/ 获取搜索结果。通常，它作为文档库的补充。Top N 指定您需要调整的搜索结果数量。`,
       promptText: `请总结以下段落。注意数字，不要胡编乱造。段落如下：
 {input}
 以上就是你需要总结的内容。`,
@@ -977,7 +988,7 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
       keywordExtract: '关键词',
       keywordExtractDescription: `该组件用于从用户的问题中提取关键词。Top N指定需要提取的关键词数量。`,
       baidu: '百度',
-      baiduDescription: `此组件用于从 www.baidu.com 获取搜索结果。通常，它作为知识库的补充。Top N 指定您需要调整的搜索结果数量。`,
+      baiduDescription: `此组件用于从 www.baidu.com 获取搜索结果。通常，它作为文档库的补充。Top N 指定您需要调整的搜索结果数量。`,
       duckDuckGo: 'DuckDuckGo',
       duckDuckGoDescription:
         '此元件用於從 www.duckduckgo.com 取得搜尋結果。通常，它作為知識庫的補充。 Top N 指定您需要調整的搜尋結果數。',
@@ -990,29 +1001,29 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
         'LLM 需要查看的对话历史窗口大小。越大越好。但要注意 LLM 的最大 Token 数。',
       wikipedia: '维基百科',
       emailTip:
-        '此组件用于从 https://pubmed.ncbi.nlm.nih.gov/ 获取搜索结果。通常，它作为知识库的补充。Top N 指定您需要调整的搜索结果数。电子邮件是必填字段。',
+        '此组件用于从 https://pubmed.ncbi.nlm.nih.gov/ 获取搜索结果。通常，它作为文档库的补充。Top N 指定您需要调整的搜索结果数。电子邮件是必填字段。',
       email: '邮箱',
       pubMed: 'PubMed',
       pubMedDescription:
-        '此组件用于从 https://pubmed.ncbi.nlm.nih.gov/ 获取搜索结果。通常，它作为知识库的补充。Top N 指定您需要调整的搜索结果数。电子邮件是必填字段。',
+        '此组件用于从 https://pubmed.ncbi.nlm.nih.gov/ 获取搜索结果。通常，它作为文档库的补充。Top N 指定您需要调整的搜索结果数。电子邮件是必填字段。',
       arXiv: 'ArXiv',
       arXivDescription:
-        '此组件用于从 https://arxiv.org/ 获取搜索结果。通常，它作为知识库的补充。Top N 指定您需要调整的搜索结果数量。',
+        '此组件用于从 https://arxiv.org/ 获取搜索结果。通常，它作为文档库的补充。Top N 指定您需要调整的搜索结果数量。',
       sortBy: '排序方式',
       submittedDate: '提交日期',
       lastUpdatedDate: '最后更新日期',
       relevance: '关联',
       google: 'Google',
       googleDescription:
-        '此组件用于从https://www.google.com/获取搜索结果。通常，它作为知识库的补充。Top N 和 SerpApi API 密钥指定您需要调整的搜索结果数量。',
+        '此组件用于从https://www.google.com/获取搜索结果。通常，它作为文档库的补充。Top N 和 SerpApi API 密钥指定您需要调整的搜索结果数量。',
       bing: 'Bing',
       bingDescription:
-        '此组件用于从 https://www.bing.com/ 获取搜索结果。通常，它作为知识库的补充。Top N 和 Bing Subscription-Key 指定您需要调整的搜索结果数量。',
+        '此组件用于从 https://www.bing.com/ 获取搜索结果。通常，它作为文档库的补充。Top N 和 Bing Subscription-Key 指定您需要调整的搜索结果数量。',
       apiKey: 'API密钥',
       country: '国家和地区',
       language: '语言',
       googleScholar: '谷歌学术',
-      googleScholarDescription: `此组件用于从 https://scholar.google.com/ 获取搜索结果。通常，它作为知识库的补充。Top N 指定您需要调整的搜索结果数量。`,
+      googleScholarDescription: `此组件用于从 https://scholar.google.com/ 获取搜索结果。通常，它作为文档库的补充。Top N 指定您需要调整的搜索结果数量。`,
       yearLow: '开始年份',
       yearHigh: '结束年份',
       patents: '专利',
@@ -1357,8 +1368,8 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
       promptMessage: '提示词是必填项',
       promptTip:
         '系统提示为大模型提供任务描述、规定回复方式，以及设置其他各种要求。系统提示通常与 key （变量）合用，通过变量设置大模型的输入数据。你可以通过斜杠或者 (x) 按钮显示可用的 key。',
-      knowledgeBasesTip: '选择关联的知识库，或者在下方选择包含知识库ID的变量。',
-      knowledgeBaseVars: '知识库变量',
+      knowledgeBasesTip: '选择关联的文档库，或者在下方选择包含文档库ID的变量。',
+      knowledgeBaseVars: '文档库变量',
       code: '代码',
       codeDescription: '它允许开发人员编写自定义 Python 逻辑。',
       inputVariables: '输入变量',
@@ -1452,7 +1463,7 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
       name: '姓名',
       avatar: '头像',
       description: '描述',
-      datasets: '数据集',
+      datasets: '文档库',
       rerankModel: 'rerank 模型',
       AISummary: 'AI 总结',
       enableWebSearch: '启用网页搜索',

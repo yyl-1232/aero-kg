@@ -6,8 +6,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
-    image: ${AeroKG_IMAGE}
-    container_name: ragflow-server
+    image: ${RAGFLOW_IMAGE}
+    container_name: AeroKG-server
     ports:
       - ${SVR_HTTP_PORT}:9380
       - 8080:80

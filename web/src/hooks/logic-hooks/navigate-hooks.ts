@@ -34,7 +34,12 @@ export const useNavigatePage = () => {
   const navigateToOldProfile = useCallback(() => {
     navigate(Routes.UserSetting);
   }, [navigate]);
-
+  const navigateToKnowledgeGraph = useCallback(
+    (graphId: string) => () => {
+      navigate(`/knowledge-graph/${graphId}`);
+    },
+    [navigate],
+  );
   const navigateToChatList = useCallback(() => {
     navigate(Routes.Chats);
   }, [navigate]);
@@ -124,7 +129,9 @@ export const useNavigatePage = () => {
     },
     [navigate],
   );
-
+  const navigateToKnowledgeGraphList = useCallback(() => {
+    navigate(Routes.KnowledgeGraph);
+  }, [navigate]);
   return {
     navigateToDatasetList,
     navigateToDataset,
@@ -144,5 +151,7 @@ export const useNavigatePage = () => {
     navigateToFiles,
     navigateToAgentList,
     navigateToOldProfile,
+    navigateToKnowledgeGraph,
+    navigateToKnowledgeGraphList,
   };
 };

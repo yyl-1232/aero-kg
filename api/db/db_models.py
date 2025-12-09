@@ -658,6 +658,18 @@ class Knowledgebase(DataBaseModel):
     class Meta:
         db_table = "knowledgebase"
 
+class KnowledgeGraph(DataBaseModel):
+    id = CharField(max_length=32, primary_key=True)
+    tenant_id = CharField(max_length=32, null=False, index=True)
+    name = CharField(max_length=128, null=False, help_text="Graph name", index=True)
+    description = TextField(null=True, help_text="Graph description")
+    permission = CharField(max_length=16, null=False, help_text="me|team", default="me", index=True)
+    created_by = CharField(max_length=32, null=False, index=True)
+    status = CharField(max_length=1, null=True, help_text="0: wasted, 1: validate", default="1", index=True)
+    create_time = DateTimeField(null=True)
+    update_time = DateTimeField(null=True)
+    class Meta:
+        db_table = "knowledge_graph"
 
 class Document(DataBaseModel):
     id = CharField(max_length=32, primary_key=True)
