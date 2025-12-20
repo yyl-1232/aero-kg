@@ -46,10 +46,9 @@ const KnowledgeAdding = () => {
         ),
       },
     ];
-
-    if (datasetActiveKey) {
+    if (datasetActiveKey || activeKey === KnowledgeRouteKey.KnowledgeGraph) {
       items.push({
-        title: t(`knowledgeDetails.${datasetActiveKey}`),
+        title: t(`knowledgeDetails.${datasetActiveKey || 'knowledgeGraph'}`),
       });
     }
 

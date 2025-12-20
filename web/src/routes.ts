@@ -55,9 +55,14 @@ const routes = [
     component: '@/pages/login-next',
     layout: false,
   },
+  // {
+  //   path: Routes.KnowledgeGraph,
+  //   component: '@/pages/knowledge-graph',
+  // },
   {
     path: Routes.KnowledgeGraph,
-    component: '@/pages/knowledge-graph',
+    component: '@/pages/knowledge-graph-dev',
+    layout: false, // 关键：不使用布局
   },
   {
     path: '/chat/share',
@@ -112,11 +117,16 @@ const routes = [
       },
       {
         path: 'knowledgeGraph',
-        component: '@/pages/add-knowledge/components/knowledge-graph',
+        component: '@/pages/add-knowledge/components/knowledge-graph-wrapper',
+        routes: [
+          {
+            path: '',
+            component: '@/pages/add-knowledge/components/knowledge-graph',
+          },
+        ],
       },
     ],
   },
-
   {
     path: '/chat',
     component: '@/pages/chat',

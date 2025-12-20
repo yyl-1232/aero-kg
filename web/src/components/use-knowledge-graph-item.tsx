@@ -10,14 +10,18 @@ export function UseKnowledgeGraphItem({ filedName }: IProps) {
   const { t } = useTranslation();
 
   return (
-    <Form.Item
-      label={t('chat.useKnowledgeGraph')}
-      tooltip={t('chat.useKnowledgeGraphTip')}
-      name={filedName}
-      initialValue={false}
-    >
-      <Switch></Switch>
-    </Form.Item>
+    <div style={{ border: '1px solid red', padding: '10px', margin: '10px 0' }}>
+      <div>调试：UseKnowledgeGraphItem 组件已渲染</div>
+      <Form.Item
+        label={t('chat.useKnowledgeGraph')}
+        tooltip={t('chat.useKnowledgeGraphTip')}
+        name={filedName}
+        initialValue={false}
+        valuePropName="checked"
+      >
+        <Switch></Switch>
+      </Form.Item>
+    </div>
   );
 }
 

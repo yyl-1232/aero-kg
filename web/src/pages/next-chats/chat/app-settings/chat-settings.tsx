@@ -79,6 +79,12 @@ export function ChatSettings({ switchSettingVisible }: ChatSettingsProps) {
 
   function onInvalid(errors: any) {
     console.log('Form validation failed:', errors);
+    console.log('Detailed errors:', JSON.stringify(errors, null, 2));
+
+    // 检查 prompt_config 的具体错误
+    if (errors.prompt_config) {
+      console.log('Prompt config errors:', errors.prompt_config);
+    }
   }
 
   useEffect(() => {

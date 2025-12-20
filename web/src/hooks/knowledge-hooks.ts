@@ -462,7 +462,8 @@ export function useFetchKnowledgeGraph() {
     queryKey: ['fetchKnowledgeGraph', knowledgeBaseId],
     initialData: { graph: {}, mind_map: {} } as IKnowledgeGraph,
     enabled: !!knowledgeBaseId,
-    gcTime: 0,
+    gcTime: 5 * 60 * 1000, // 缓存5分钟
+    staleTime: 60 * 1000, // 1分钟内认为数据是新鲜的
     queryFn: async () => {
       const { data } = await getKnowledgeGraph(knowledgeBaseId);
       return data?.data;

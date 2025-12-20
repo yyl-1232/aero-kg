@@ -8,7 +8,11 @@ export const useHandleMenuClick = () => {
 
   const handleMenuClick = useCallback(
     (key: Routes) => () => {
-      navigate(`${Routes.DatasetBase}${key}/${id}`);
+      if (key === Routes.KnowledgeGraph) {
+        navigate(`/knowledge-graph-dev?id=${id}`);
+      } else {
+        navigate(`${Routes.DatasetBase}${key}/${id}`);
+      }
     },
     [id, navigate],
   );
