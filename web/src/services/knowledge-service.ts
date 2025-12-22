@@ -13,6 +13,7 @@ const {
   update_kb,
   rm_kb,
   get_kb_detail,
+  get_kb_graph_detail,
   kb_list,
   get_document_list,
   document_change_status,
@@ -57,6 +58,10 @@ const methods = {
   },
   get_kb_detail: {
     url: get_kb_detail,
+    method: 'get',
+  },
+  get_kb_graph_detail: {
+    url: get_kb_graph_detail,
     method: 'get',
   },
   getList: {

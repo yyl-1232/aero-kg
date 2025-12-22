@@ -45,7 +45,7 @@ export const useFetchKnowledgeBaseConfiguration = () => {
     initialData: {} as IKnowledge,
     gcTime: 0,
     queryFn: async () => {
-      const { data } = await kbService.get_kb_detail({
+      const { data } = await kbService.get_kb_graph_detail({
         kb_id: knowledgeBaseId,
       });
       return data?.data ?? {};

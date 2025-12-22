@@ -349,11 +349,8 @@ def knowledge_graph(kb_id):
     else:
         debug_log("=== AUTHORIZATION FAILED ===")
         debug_log("No tenant contained the requested knowledge base")
-        return get_json_result(
-            data=False,
-            message='No authorization.',
-            code=RetCode.AUTHENTICATION_ERROR
-        )
+        obj = {"graph": {}, "mind_map": {}}
+        return get_json_result(data=obj)
 
     debug_log("=== AUTHORIZATION SUCCESS ===")
     kb = kb_found[0]
@@ -435,3 +432,27 @@ def get_meta():
                 code=settings.RetCode.AUTHENTICATION_ERROR
             )
     return get_json_result(data=DocumentService.get_meta_by_kbs(kb_ids))
+
+
+@manager.route('/graph/detail', methods=['GET'])  # noqa: F821
+@login_required
+def detail_graph():
+    graph_id = request.args["kb_id"]
+    try:
+        tenants = UserTenantService.query(user_id=current_user.id)
+        for tenant in tenants:
+            if KnowledgeGraphService.query(
+                    tenant_id=tenant.tenant_id, id=graph_id):
+                break
+        else:
+            return get_json_result(
+                data=False, message='Only owner of knowledge graph authorized for this operation.',
+                code=settings.RetCode.OPERATING_ERROR)
+
+        graph = KnowledgeGraphService.get_detail(graph_id)
+        if not graph:
+            return get_data_error_result(
+                message="Can't find this knowledge graph!")
+        return get_json_result(data=graph)
+    except Exception as e:
+        return server_error_response(e)

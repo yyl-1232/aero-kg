@@ -65,7 +65,7 @@ const KnowledgeGraphDetail = () => {
           <BreadcrumbSeparator />
           <BreadcrumbItem>
             <BreadcrumbPage>
-              {graphData?.name || `图谱详情 (ID: ${id})`}
+              {kbData?.name || `图谱详情 (ID: ${id})`}
             </BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
@@ -73,10 +73,10 @@ const KnowledgeGraphDetail = () => {
 
       <div className="mt-6">
         <h1 className="text-2xl font-bold mb-4">
-          {graphData?.name || `知识图谱详情 (ID: ${id})`}
+          {kbData?.name || `知识图谱详情 (ID: ${id})`}
         </h1>
         <p className="text-gray-600">图谱ID: {id}</p>
-        {!graphData?.name && (
+        {!kbData?.name && (
           <p className="text-red-500 mt-2">
             警告：无法获取知识库名称，请检查权限或网络连接
           </p>
