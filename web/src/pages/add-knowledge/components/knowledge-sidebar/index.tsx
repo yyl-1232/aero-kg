@@ -1,7 +1,10 @@
 import { ReactComponent as ConfigurationIcon } from '@/assets/svg/knowledge-configration.svg';
 import { ReactComponent as DatasetIcon } from '@/assets/svg/knowledge-dataset.svg';
 import { ReactComponent as TestingIcon } from '@/assets/svg/knowledge-testing.svg';
-import { useFetchKnowledgeBaseConfiguration } from '@/hooks/knowledge-hooks';
+import {
+  useFetchKnowledgeBaseConfiguration,
+  useFetchKnowledgeGraph,
+} from '@/hooks/knowledge-hooks';
 import {
   useGetKnowledgeSearchParams,
   useSecondPathName,
@@ -14,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'umi';
 import { KnowledgeRouteKey } from '../../constant';
 
+import { isEmpty } from 'lodash';
 import styles from './index.less';
 
 const KnowledgeSidebar = () => {

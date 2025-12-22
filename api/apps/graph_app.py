@@ -8,6 +8,8 @@ from api.db.services.knowledge_graph_service import KnowledgeGraphService
 from api.constants import DATASET_NAME_LIMIT
 from api.db.services import duplicate_name
 manager = Blueprint("graph", __name__)
+from api.utils import current_timestamp, datetime_format
+from datetime import datetime
 
 @manager.route('/create', methods=['post'])
 @login_required
@@ -26,8 +28,9 @@ def create_graph():
         req["tenant_id"] = current_user.id
         req["created_by"] = current_user.id
         req["permission"] = req.get("permission", "me")
-
-        if not KnowledgeGraphService.save(**req):
+        req["create_time"] = current_timestamp()
+        req["update_time"] = current_timestamp()
+        if not KnowledgeGraphService.insert(**req):
             return get_data_error_result(message="Create graph error")
         return get_json_result(data={"graph_id": req["id"]})
     except Exception as e:

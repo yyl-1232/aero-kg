@@ -1,3 +1,4 @@
+import { RAGFlowAvatar } from '@/components/ragflow-avatar';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -6,88 +7,159 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
-import {
-  useFetchKnowledgeBaseConfiguration,
-  useFetchKnowledgeGraph,
-} from '@/hooks/knowledge-hooks';
+import { Button } from '@/components/ui/button';
+import { useFetchKnowledgeBaseConfiguration } from '@/hooks/knowledge-hooks';
+import { cn } from '@/lib/utils';
+import { formatPureDate } from '@/utils/date';
+import { FileSearch2, GitGraph, Upload } from 'lucide-react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'umi';
 
+type TabType = 'graph-display' | 'retrieval-test' | 'file-upload';
+
 const KnowledgeGraphDetail = () => {
   const { id } = useParams();
-  const { data: graphData, loading: graphLoading } = useFetchKnowledgeGraph();
   const { data: kbData, loading: kbLoading } =
     useFetchKnowledgeBaseConfiguration();
   const { t } = useTranslation();
   const navigate = useNavigate();
-
-  // 详细的调试信息
-  console.log('=== Knowledge Graph Detail Debug ===');
-  console.log('URL ID:', id);
-  console.log('Graph Data:', graphData);
-  console.log('Graph Loading:', graphLoading);
-  console.log('KB Data:', kbData);
-  console.log('KB Loading:', kbLoading);
-
-  // 检查数据结构
-  if (kbData) {
-    console.log('KB Data structure:', Object.keys(kbData));
-    console.log('KB Name:', kbData.name);
-    console.log('KB ID:', kbData.id);
-  }
-
-  if (graphData) {
-    console.log('Graph Data structure:', Object.keys(graphData));
-    console.log('Graph Name:', graphData.name);
-  }
-
+  const [activeTab, setActiveTab] = useState<TabType>('graph-display');
+  console.log('kbData:', kbData);
   const handleBackToList = () => {
     navigate('/knowledge-graph');
   };
 
+  const tabs = [
+    {
+      key: 'graph-display' as TabType,
+      label: '知识图谱展示',
+      icon: GitGraph,
+    },
+    {
+      key: 'retrieval-test' as TabType,
+      label: '检索测试',
+      icon: FileSearch2,
+    },
+    {
+      key: 'file-upload' as TabType,
+      label: '实体-关系文件上传',
+      icon: Upload,
+    },
+  ];
+
   // 显示加载状态
   if (kbLoading) {
-    console.log('Still loading KB data...');
     return <div className="p-6">加载中...</div>;
   }
 
-  console.log('Rendering with data - KB Name:', graphData?.name);
-
   return (
-    <div className="p-6">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink onClick={handleBackToList}>
-              {t('header.knowledgeGraph')}
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>
-              {kbData?.name || `图谱详情 (ID: ${id})`}
-            </BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+    <div className="flex flex-col w-full h-screen bg-background text-foreground">
+      {/* 顶部面包屑 */}
+      <div className="p-6 pb-0">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink onClick={handleBackToList}>
+                {t('header.knowledgeGraph')}
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage>
+                {kbData?.name || `图谱详情 (ID: ${id})`}
+              </BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </div>
 
-      <div className="mt-6">
-        <h1 className="text-2xl font-bold mb-4">
-          {kbData?.name || `知识图谱详情 (ID: ${id})`}
-        </h1>
-        <p className="text-gray-600">图谱ID: {id}</p>
-        {!kbData?.name && (
-          <p className="text-red-500 mt-2">
-            警告：无法获取知识库名称，请检查权限或网络连接
-          </p>
-        )}
+      {/* 主要内容区域 */}
+      <div className="flex flex-1 bg-background">
+        {/* 左侧边栏 */}
+        <aside className="relative p-5 space-y-8 w-80">
+          {/* 知识图谱基本信息 */}
+          <div className="flex gap-2.5 max-w-[200px] items-center">
+            <RAGFlowAvatar
+              avatar={kbData?.avatar}
+              name={kbData?.name}
+              className="size-16"
+            />
+            <div className="text-text-secondary text-xs space-y-1 overflow-hidden">
+              <h3 className="text-lg font-semibold line-clamp-1 text-text-primary">
+                {kbData?.name}
+              </h3>
+              <div className="flex justify-between">
+                <span>{kbData?.node_num ?? 0} 节点</span>
+                <span>{kbData?.edge_num ?? 0} 关系</span>
+              </div>
+              <div>创建于 {formatPureDate(kbData?.create_time)}</div>
+            </div>
+          </div>
 
-        {/* 调试信息显示 */}
-        <div className="mt-4 p-4 bg-gray-100 rounded text-sm">
-          <h3 className="font-bold mb-2">调试信息:</h3>
-          <p>KB Data: {JSON.stringify(kbData, null, 2)}</p>
-          <p>Graph Data: {JSON.stringify(graphData, null, 2)}</p>
-        </div>
+          {/* 功能按钮 */}
+          <div className="w-full flex flex-col gap-3">
+            {tabs.map((tab) => {
+              const active = activeTab === tab.key;
+              return (
+                <Button
+                  key={tab.key}
+                  variant={active ? 'secondary' : 'ghost'}
+                  className={cn(
+                    'w-full justify-start gap-2.5 px-3 relative h-10 text-text-sub-title-invert',
+                    {
+                      'bg-bg-card': active,
+                      'text-text-primary': active,
+                    },
+                  )}
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  <tab.icon className="size-4" />
+                  <span>{tab.label}</span>
+                </Button>
+              );
+            })}
+          </div>
+        </aside>
+
+        {/* 右侧内容区域 */}
+        <main className="flex-1 p-6">
+          {activeTab === 'graph-display' && (
+            <div className="h-full">
+              <h2 className="text-xl font-semibold mb-4">知识图谱展示</h2>
+              <div className="bg-white rounded-lg border p-4 h-[calc(100%-3rem)]">
+                {/* 这里放置知识图谱可视化组件 */}
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  知识图谱可视化区域 (待实现)
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'retrieval-test' && (
+            <div className="h-full">
+              <h2 className="text-xl font-semibold mb-4">检索测试</h2>
+              <div className="bg-white rounded-lg border p-4 h-[calc(100%-3rem)]">
+                {/* 这里放置检索测试组件 */}
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  检索测试区域 (待实现)
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'file-upload' && (
+            <div className="h-full">
+              <h2 className="text-xl font-semibold mb-4">实体-关系文件上传</h2>
+              <div className="bg-white rounded-lg border p-4 h-[calc(100%-3rem)]">
+                {/* 这里放置文件上传组件 */}
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  文件上传区域 (待实现)
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
       </div>
     </div>
   );

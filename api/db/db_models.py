@@ -668,8 +668,8 @@ class KnowledgeGraph(DataBaseModel):
     edge_num = IntegerField(default=0, index=True)
     created_by = CharField(max_length=32, null=False, index=True)
     status = CharField(max_length=1, null=True, help_text="0: wasted, 1: validate", default="1", index=True)
-    create_time = DateTimeField(null=True)
-    update_time = DateTimeField(null=True)
+    create_time = BigIntegerField(null=True)
+    update_time = BigIntegerField(null=True)
     class Meta:
         db_table = "knowledge_graph"
 
