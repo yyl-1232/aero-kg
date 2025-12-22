@@ -29,7 +29,7 @@ const KnowledgeSidebar = () => {
     navigate(`/knowledge/${e.key}?id=${knowledgeId}`);
   };
 
-  // const { data } = useFetchKnowledgeGraph();
+  const { data } = useFetchKnowledgeGraph();
 
   type MenuItem = Required<MenuProps>['items'][number];
 
@@ -73,15 +73,15 @@ const KnowledgeSidebar = () => {
       ),
     ];
 
-    // if (!isEmpty(data?.graph)) {
-    //   list.push(
-    //     getItem(
-    //       KnowledgeRouteKey.KnowledgeGraph,
-    //       KnowledgeRouteKey.KnowledgeGraph,
-    //       <GitGraph />,
-    //     ),
-    //   );
-    // }
+    if (!isEmpty(data?.graph)) {
+      list.push(
+        getItem(
+          KnowledgeRouteKey.KnowledgeGraph,
+          KnowledgeRouteKey.KnowledgeGraph,
+          <GitGraph />,
+        ),
+      );
+    }
 
     return list;
   }, [data, getItem]);
