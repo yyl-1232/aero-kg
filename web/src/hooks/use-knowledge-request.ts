@@ -234,7 +234,11 @@ export const useUpdateKnowledge = (shouldFetchList = false) => {
   return { data, loading, saveKnowledgeConfiguration: mutateAsync };
 };
 
-export const useFetchKnowledgeBaseConfiguration = (refreshCount?: number) => {
+export const useFetchKnowledgeBaseConfiguration = (props?: {
+  isEdit?: boolean;
+  refreshCount?: number;
+}) => {
+  const { isEdit = true, refreshCount } = props || { isEdit: true };
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const knowledgeBaseId = searchParams.get('id') || id;
@@ -251,10 +255,18 @@ export const useFetchKnowledgeBaseConfiguration = (refreshCount?: number) => {
     initialData: {} as IKnowledge,
     gcTime: 0,
     queryFn: async () => {
-      const { data } = await kbService.get_kb_detail({
-        kb_id: knowledgeBaseId,
-      });
-      return data?.data ?? {};
+      if (isEdit) {
+        const { data } = await kbService.get_kb_detail({
+          kb_id: knowledgeBaseId,
+        });
+        console.log('=== API Response from get_kb_detail ===');
+        console.log('Full response:', data);
+        console.log('Response data:', data?.data);
+        console.log('Knowledge base name:', data?.data?.name);
+        return data?.data ?? {};
+      } else {
+        return {};
+      }
     },
   });
 
@@ -271,6 +283,10 @@ export function useFetchKnowledgeGraph() {
     gcTime: 0,
     queryFn: async () => {
       const { data } = await getKnowledgeGraph(knowledgeBaseId);
+      console.log('=== API Response from getKnowledgeGraph ===');
+      console.log('Full response:', data);
+      console.log('Response data:', data?.data);
+      console.log('Graph name:', data?.data?.name);
       return data?.data;
     },
   });

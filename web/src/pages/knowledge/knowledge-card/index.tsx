@@ -1,4 +1,3 @@
-import { KnowledgeRouteKey } from '@/constants/knowledge';
 import { IKnowledge } from '@/interfaces/database/knowledge';
 import { formatDate } from '@/utils/date';
 import {
@@ -33,9 +32,7 @@ const KnowledgeCard = ({ item }: IProps) => {
   };
 
   const handleCardClick = () => {
-    navigate(`/knowledge/${KnowledgeRouteKey.Dataset}?id=${item.id}`, {
-      state: { from: 'list' },
-    });
+    navigate(`/knowledge-graph/${item.id}`);
   };
 
   return (

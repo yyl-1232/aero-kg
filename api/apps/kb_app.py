@@ -23,6 +23,7 @@ from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
 from api.db.services.user_service import TenantService, UserTenantService
+from api.settings import RetCode
 from api.utils.api_utils import server_error_response, get_data_error_result, validate_request, not_allowed_parameters
 from api.utils import get_uuid
 from api.db import StatusEnum, FileSource
@@ -34,7 +35,13 @@ from rag.nlp import search
 from api.constants import DATASET_NAME_LIMIT
 from rag.settings import PAGERANK_FLD
 from rag.utils.storage_factory import STORAGE_IMPL
+from api.db.services.knowledge_graph_service import KnowledgeGraphService
 
+from datetime import datetime
+
+def debug_log(msg):
+    ts = datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")
+    print(f"{ts} {msg}")
 
 @manager.route('/create', methods=['post'])  # noqa: F821
 @login_required
@@ -312,43 +319,92 @@ def rename_tags(kb_id):
     return get_json_result(data=True)
 
 
+
+
+
 @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
 @login_required
 def knowledge_graph(kb_id):
-    if not KnowledgebaseService.accessible(kb_id, current_user.id):
+    # # 调试信息：当前用户和知识库ID
+    debug_log(f"=== DEBUG: Knowledge Graph Access ===")
+    # print(f"Current user ID: {current_user.id}")
+    # print(f"Requested KB ID: {kb_id}")
+    #
+    # # 替换原有的权限检查 - 只查询自定义的 knowledge_graph 表
+    tenants = UserTenantService.query(user_id=current_user.id)
+    # print(f"User tenants found: {len(tenants)}")
+
+    for i, tenant in enumerate(tenants):
+        debug_log(f"  Tenant {i + 1}: {tenant.tenant_id}")
+        # 使用 KnowledgeGraphService 查询自定义表
+        kb_found = KnowledgeGraphService.query(
+            tenant_id=tenant.tenant_id,
+            id=kb_id,
+            status="1"
+        )
+        # print(f"    KB found in tenant {tenant.tenant_id}: {bool(kb_found)}")
+        if kb_found:
+            debug_log(f"    KB details: id={kb_found[0].id}, name={kb_found[0].name}")
+            break
+    else:
+        debug_log("=== AUTHORIZATION FAILED ===")
+        debug_log("No tenant contained the requested knowledge base")
         return get_json_result(
             data=False,
             message='No authorization.',
-            code=settings.RetCode.AUTHENTICATION_ERROR
+            code=RetCode.AUTHENTICATION_ERROR
         )
-    _, kb = KnowledgebaseService.get_by_id(kb_id)
-    req = {
-        "kb_id": [kb_id],
-        "knowledge_graph_kwd": ["graph"]
-    }
 
-    obj = {"graph": {}, "mind_map": {}}
-    if not settings.docStoreConn.indexExist(search.index_name(kb.tenant_id), kb_id):
-        return get_json_result(data=obj)
-    sres = settings.retrievaler.search(req, search.index_name(kb.tenant_id), [kb_id])
-    if not len(sres.ids):
-        return get_json_result(data=obj)
+    debug_log("=== AUTHORIZATION SUCCESS ===")
+    kb = kb_found[0]
+    debug_log(f"KB retrieved: tenant_id={kb.tenant_id}, name={kb.name}")
 
-    for id in sres.ids[:1]:
-        ty = sres.field[id]["knowledge_graph_kwd"]
-        try:
-            content_json = json.loads(sres.field[id]["content_with_weight"])
-        except Exception:
-            continue
+    # req = {
+    #     "kb_id": [kb_id],
+    #     "knowledge_graph_kwd": ["graph"]
+    # }
 
-        obj[ty] = content_json
+    obj = {"name": kb_found[0].name, "graph": {}, "mind_map": {}}
+    index_name = search.index_name(kb.tenant_id)
+    print(f"Checking index existence: {index_name}")
 
-    if "nodes" in obj["graph"]:
-        obj["graph"]["nodes"] = sorted(obj["graph"]["nodes"], key=lambda x: x.get("pagerank", 0), reverse=True)[:256]
-        if "edges" in obj["graph"]:
-            node_id_set = { o["id"] for o in obj["graph"]["nodes"] }
-            filtered_edges = [o for o in obj["graph"]["edges"] if o["source"] != o["target"] and o["source"] in node_id_set and o["target"] in node_id_set]
-            obj["graph"]["edges"] = sorted(filtered_edges, key=lambda x: x.get("weight", 0), reverse=True)[:128]
+    # if not settings.docStoreConn.indexExist(index_name, kb_id):
+    #     print("Index does not exist, returning empty graph")
+    #     return get_json_result(data=obj)
+    #
+    # sres = settings.retrievaler.search(req, index_name, [kb_id])
+    # print(f"Search results: {len(sres.ids)} documents found")
+    #
+    # if not len(sres.ids):
+    #     print("No graph data found, returning empty graph")
+    #     return get_json_result(data=obj)
+    #
+    # for id in sres.ids[:1]:
+    #     ty = sres.field[id]["knowledge_graph_kwd"]
+    #     print(f"Processing graph type: {ty}")
+    #     try:
+    #         content_json = json.loads(sres.field[id]["content_with_weight"])
+    #         print(f"Successfully parsed JSON with {len(content_json)} keys")
+    #     except Exception as e:
+    #         print(f"Failed to parse JSON: {e}")
+    #         continue
+    #
+    #     obj[ty] = content_json
+
+    # if "nodes" in obj["graph"]:
+    #     node_count = len(obj["graph"]["nodes"])
+    #     print(f"Processing {node_count} nodes")
+    #     obj["graph"]["nodes"] = sorted(obj["graph"]["nodes"], key=lambda x: x.get("pagerank", 0), reverse=True)[:256]
+    #     if "edges" in obj["graph"]:
+    #         edge_count = len(obj["graph"]["edges"])
+    #         print(f"Processing {edge_count} edges")
+    #         node_id_set = {o["id"] for o in obj["graph"]["nodes"]}
+    #         filtered_edges = [o for o in obj["graph"]["edges"] if
+    #                           o["source"] != o["target"] and o["source"] in node_id_set and o["target"] in node_id_set]
+    #         obj["graph"]["edges"] = sorted(filtered_edges, key=lambda x: x.get("weight", 0), reverse=True)[:128]
+    #         print(f"Filtered to {len(obj['graph']['edges'])} edges")
+
+    print("=== GRAPH DATA SUCCESSFULLY RETURNED ===")
     return get_json_result(data=obj)
 
 

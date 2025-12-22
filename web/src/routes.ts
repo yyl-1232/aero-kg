@@ -60,8 +60,13 @@ const routes = [
   //   component: '@/pages/knowledge-graph',
   // },
   {
+    path: '/knowledge-graph/:id',
+    component: '@/pages/knowledge-graph-detail',
+    layout: false,
+  },
+  {
     path: Routes.KnowledgeGraph,
-    component: '@/pages/knowledge-graph-dev',
+    component: '@/pages/knowledge-graph',
     layout: false, // 关键：不使用布局
   },
   {
@@ -193,24 +198,24 @@ const routes = [
         path: Routes.KnowledgeGraph,
         component: `@/pages${Routes.KnowledgeGraph}`,
       },
-      {
-        path: `${Routes.KnowledgeGraph}/:id`,
-        component: `@/pages${Routes.KnowledgeGraph}/detail`,
-        routes: [
-          {
-            path: 'upload',
-            component: `@/pages${Routes.KnowledgeGraph}/detail/upload`,
-          },
-          {
-            path: 'view',
-            component: `@/pages${Routes.KnowledgeGraph}/detail/view`,
-          },
-          {
-            path: 'configuration',
-            component: `@/pages${Routes.KnowledgeGraph}/detail/configuration`,
-          },
-        ],
-      },
+      // {
+      //   path: `${Routes.KnowledgeGraph}/:id`,
+      //   component: `@/pages${Routes.KnowledgeGraph}/detail`,
+      //   routes: [
+      //     {
+      //       path: 'upload',
+      //       component: `@/pages${Routes.KnowledgeGraph}/detail/upload`,
+      //     },
+      //     {
+      //       path: 'view',
+      //       component: `@/pages${Routes.KnowledgeGraph}/detail/view`,
+      //     },
+      //     {
+      //       path: 'configuration',
+      //       component: `@/pages${Routes.KnowledgeGraph}/detail/configuration`,
+      //     },
+      //   ],
+      // },
     ],
   },
   {
