@@ -28,6 +28,9 @@ def create_graph():
         req["tenant_id"] = current_user.id
         req["created_by"] = current_user.id
         req["permission"] = req.get("permission", "me")
+        req["node_num"] = 0
+        req["edge_num"] = 0
+        req["size"] = 0
         req["create_time"] = current_timestamp()
         req["update_time"] = current_timestamp()
         if not KnowledgeGraphService.insert(**req):

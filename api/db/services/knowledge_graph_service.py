@@ -18,6 +18,7 @@ class KnowledgeGraphService(CommonService):
             cls.model.permission,
             cls.model.node_num,
             cls.model.edge_num,
+            cls.model.size,
             cls.model.create_time,
             cls.model.update_time,
         ]

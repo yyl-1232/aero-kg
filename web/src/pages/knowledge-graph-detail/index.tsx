@@ -8,18 +8,23 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
-import { useFetchKnowledgeBaseConfiguration } from '@/hooks/knowledge-hooks';
+import {
+  useFetchKnowledgeBaseConfiguration,
+  useKnowledgeBaseId,
+} from '@/hooks/knowledge-hooks';
 import { cn } from '@/lib/utils';
 import { formatPureDate } from '@/utils/date';
+import { useQueryClient } from '@tanstack/react-query';
 import { FileSearch2, GitGraph, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'umi';
-
+import { EntityRelationUpload } from './entity-relation-upload';
 type TabType = 'graph-display' | 'retrieval-test' | 'file-upload';
 
 const KnowledgeGraphDetail = () => {
   const { id } = useParams();
+  const datasetId = useKnowledgeBaseId();
   const { data: kbData, loading: kbLoading } =
     useFetchKnowledgeBaseConfiguration();
   const { t } = useTranslation();
@@ -28,6 +33,12 @@ const KnowledgeGraphDetail = () => {
   console.log('kbData:', kbData);
   const handleBackToList = () => {
     navigate('/knowledge-graph');
+  };
+  const refreshKnowledgeGraph = () => {
+    let queryClient = useQueryClient();
+    queryClient.invalidateQueries({
+      queryKey: ['fetchKnowledgeGraph', datasetId],
+    });
   };
 
   const tabs = [
@@ -152,10 +163,13 @@ const KnowledgeGraphDetail = () => {
             <div className="h-full">
               <h2 className="text-xl font-semibold mb-4">实体-关系文件上传</h2>
               <div className="bg-white rounded-lg border p-4 h-[calc(100%-3rem)]">
-                {/* 这里放置文件上传组件 */}
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  文件上传区域 (待实现)
-                </div>
+                <EntityRelationUpload
+                  datasetId={datasetId}
+                  onUploadSuccess={() => {
+                    // 刷新知识图谱数据
+                    refreshKnowledgeGraph();
+                  }}
+                />
               </div>
             </div>
           )}
