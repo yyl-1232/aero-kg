@@ -1,15 +1,19 @@
 from flask import Blueprint
-from flask import request
 from flask_login import login_required, current_user
+from flask import current_app, request
+from api.db.services.file_service import FileService
 from api.utils.api_utils import server_error_response, get_data_error_result, validate_request, get_json_result
 from api.utils import get_uuid
-from api.db import StatusEnum
+from api.db import StatusEnum, FileType
 from api.db.services.knowledge_graph_service import KnowledgeGraphService
 from api.constants import DATASET_NAME_LIMIT
 from api.db.services import duplicate_name
+from rag.utils.storage_factory import STORAGE_IMPL
+
 manager = Blueprint("graph", __name__)
 from api.utils import current_timestamp, datetime_format
 from datetime import datetime
+from api.db.services import duplicate_name
 
 @manager.route('/create', methods=['post'])
 @login_required
@@ -23,6 +27,13 @@ def create_graph():
         return get_data_error_result(message="Graph name can't be empty.")
 
     try:
+        graph_name = duplicate_name(
+            KnowledgeGraphService.query,
+            name=graph_name.strip(),
+            tenant_id=current_user.id,
+            status="1"
+        )
+
         req["id"] = get_uuid()
         req["name"] = graph_name.strip()
         req["tenant_id"] = current_user.id
@@ -77,5 +88,110 @@ def delete_graph(graph_id):
             return get_data_error_result(message="Delete graph error")
 
         return get_json_result(data=True)
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/<graph_id>/upload_files', methods=['POST'])
+@login_required
+def upload_graph_files(graph_id):
+    from api.db.services.knowledge_graph_service import KnowledgeGraphService
+    from api.db.services.file_service import FileService
+    from api.utils import get_uuid
+    from rag.utils.storage_factory import STORAGE_IMPL
+    current_app.logger.warning(
+        f"[UPLOAD_FILES] HIT graph_id={graph_id}, "
+        f"method={request.method}, user={current_user.id}"
+    )
+    # 验证图谱权限
+    graph = KnowledgeGraphService.query(
+        id=graph_id,
+        tenant_id=current_user.id,
+        status="1"
+    )
+
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    if 'files' not in request.files:
+        return get_json_result(data=False, message='No files part!', code=400)
+
+    files = request.files.getlist('files')
+
+    try:
+        # 获取根文件夹
+        root_folder = FileService.get_root_folder(current_user.id)
+
+        # 创建或获取.knowledgegraph文件夹
+        kg_folder = FileService.query(
+            name=".knowledgegraph",
+            parent_id=root_folder["id"],
+            tenant_id=current_user.id
+        )
+        if not kg_folder:
+            kg_folder = FileService.insert({
+                "id": get_uuid(),
+                "parent_id": root_folder["id"],
+                "tenant_id": current_user.id,
+                "created_by": current_user.id,
+                "name": ".knowledgegraph",
+                "location": "",
+                "size": 0,
+                "type": FileType.FOLDER.value
+            })
+        else:
+            kg_folder = kg_folder[0]
+
+            # 创建图谱文件夹
+        graph_folder = FileService.query(
+            name=graph[0].name,
+            parent_id=kg_folder.id,
+            tenant_id=current_user.id
+        )
+        if not graph_folder:
+            graph_folder = FileService.insert({
+                "id": get_uuid(),
+                "parent_id": kg_folder.id,
+                "tenant_id": current_user.id,
+                "created_by": current_user.id,
+                "name": graph[0].name,
+                "location": "",
+                "size": 0,
+                "type": FileType.FOLDER.value
+            })
+        else:
+            graph_folder = graph_folder[0]
+
+        file_results = []
+        for file in files:
+            if file.filename == '':
+                continue
+
+                # 验证文件类型
+            if file.filename not in ['entities.json', 'relations.json']:
+                return get_data_error_result(message="Only entities.json and relations.json files are allowed")
+
+                # 存储文件
+            location = file.filename
+            while STORAGE_IMPL.obj_exist(graph_folder.id, location):
+                location += "_"
+
+            blob = file.read()
+            STORAGE_IMPL.put(graph_folder.id, location, blob)
+
+            file_record = {
+                "id": get_uuid(),
+                "parent_id": graph_folder.id,
+                "tenant_id": current_user.id,
+                "created_by": current_user.id,
+                "type": "json",
+                "name": file.filename,
+                "location": location,
+                "size": len(blob),
+            }
+            file_record = FileService.insert(file_record)
+            file_results.append(file_record.to_json())
+
+        return get_json_result(data=file_results)
     except Exception as e:
         return server_error_response(e)

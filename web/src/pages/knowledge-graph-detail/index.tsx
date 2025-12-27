@@ -19,7 +19,7 @@ import { FileSearch2, GitGraph, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'umi';
-import { EntityRelationUpload } from './entity-relation-upload';
+import { FileUpload } from './components/file-upload';
 type TabType = 'graph-display' | 'retrieval-test' | 'file-upload';
 
 const KnowledgeGraphDetail = () => {
@@ -163,11 +163,10 @@ const KnowledgeGraphDetail = () => {
             <div className="h-full">
               <h2 className="text-xl font-semibold mb-4">实体-关系文件上传</h2>
               <div className="bg-white rounded-lg border p-4 h-[calc(100%-3rem)]">
-                <EntityRelationUpload
-                  datasetId={datasetId}
+                <FileUpload
                   onUploadSuccess={() => {
-                    // 刷新知识图谱数据
-                    refreshKnowledgeGraph();
+                    // 刷新文件列表或显示成功消息
+                    console.log('Files uploaded successfully');
                   }}
                 />
               </div>

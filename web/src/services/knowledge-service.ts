@@ -14,6 +14,7 @@ const {
   rm_kb,
   get_kb_detail,
   get_kb_graph_detail,
+  graph_upload_files,
   kb_list,
   get_document_list,
   document_change_status,
@@ -63,6 +64,10 @@ const methods = {
   get_kb_graph_detail: {
     url: get_kb_graph_detail,
     method: 'get',
+  },
+  graph_upload_files: {
+    url: graph_upload_files,
+    method: 'post',
   },
   getList: {
     url: kb_list,

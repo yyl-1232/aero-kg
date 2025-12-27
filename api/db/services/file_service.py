@@ -508,3 +508,52 @@ class FileService(CommonService):
     def put_blob(user_id, location, blob):
         bname = f"{user_id}-downloads"
         return STORAGE_IMPL.put(bname, location, blob)
+
+    @classmethod
+    @DB.connection_context()
+    def get_knowledge_graph_folder(cls, tenant_id):
+        """获取知识图谱根文件夹"""
+        root_folder = cls.get_root_folder(tenant_id)
+
+        # 查找或创建.knowledgegraph文件夹
+        kg_folder = cls.query(name=".knowledgegraph", parent_id=root_folder["id"], tenant_id=tenant_id)
+        if kg_folder:
+            return kg_folder[0].to_dict()
+
+            # 创建.knowledgegraph文件夹
+        kg_folder = cls.insert({
+            "id": get_uuid(),
+            "parent_id": root_folder["id"],
+            "tenant_id": tenant_id,
+            "created_by": tenant_id,
+            "name": ".knowledgegraph",
+            "location": "",
+            "size": 0,
+            "type": FileType.FOLDER.value
+        })
+        return kg_folder.to_dict()
+
+    @classmethod
+    @DB.connection_context()
+    def new_a_file_from_graph(cls, tenant_id, graph_name, parent_id):
+        """为知识图谱创建文件夹"""
+        # 检查是否已存在
+        existing = cls.query(name=graph_name, parent_id=parent_id, tenant_id=tenant_id)
+        if existing:
+            return existing[0].to_dict()
+
+            # 创建新文件夹
+        folder = cls.insert({
+            "id": get_uuid(),
+            "parent_id": parent_id,
+            "tenant_id": tenant_id,
+            "created_by": tenant_id,
+            "name": graph_name,
+            "location": "",
+            "size": 0,
+            "type": FileType.FOLDER.value
+        })
+        return folder.to_dict()
+
+
+
