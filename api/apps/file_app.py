@@ -239,48 +239,168 @@ def get_all_parent_folders():
 def rm():
     req = request.json
     file_ids = req["file_ids"]
+
+    print(f"file_ids to delete: {file_ids}")
+
+    # =========================
+    # 知识图谱删除状态收集器
+    # =========================
+    deleted_graph_types = set()   # {"entity", "relation"}
+    deleted_graph_file_ids = set()
+
     try:
         for file_id in file_ids:
+            print(f"\n===== 正在处理文件ID: {file_id} =====")
+
             e, file = FileService.get_by_id(file_id)
             if not e:
                 return get_data_error_result(message="File or Folder not found!")
             if not file.tenant_id:
                 return get_data_error_result(message="Tenant not found!")
             if file.source_type == FileSource.KNOWLEDGEBASE:
+                print("跳过知识库类型文件")
                 continue
 
+            # -------------------------
+            # 1. 文件 / 文件夹删除
+            # -------------------------
             if file.type == FileType.FOLDER.value:
-                file_id_list = FileService.get_all_innermost_file_ids(file_id, [])
-                for inner_file_id in file_id_list:
-                    e, file = FileService.get_by_id(inner_file_id)
+                print(f"开始处理文件夹删除: {file_id}")
+
+                inner_file_ids = FileService.get_all_innermost_file_ids(file_id, [])
+                for inner_file_id in inner_file_ids:
+                    e, inner_file = FileService.get_by_id(inner_file_id)
                     if not e:
                         return get_data_error_result(message="File not found!")
-                    STORAGE_IMPL.rm(file.parent_id, file.location)
+
+                    print(f"删除内层文件: {inner_file.name}")
+                    STORAGE_IMPL.rm(inner_file.parent_id, inner_file.location)
+
+                    # 记录知识图谱文件类型
+                    name = inner_file.name.lower()
+                    if name == "entities.json":
+                        deleted_graph_types.add("entity")
+                        deleted_graph_file_ids.add(inner_file_id)
+                        print("记录删除实体文件 (来自文件夹)")
+                    elif name == "relations.json":
+                        deleted_graph_types.add("relation")
+                        deleted_graph_file_ids.add(inner_file_id)
+                        print("记录删除关系文件 (来自文件夹)")
+
                 FileService.delete_folder_by_pf_id(current_user.id, file_id)
+
             else:
+                print(f"删除单个文件: {file.name}")
                 STORAGE_IMPL.rm(file.parent_id, file.location)
                 if not FileService.delete(file):
-                    return get_data_error_result(
-                        message="Database error (File removal)!")
+                    return get_data_error_result(message="Database error (File removal)!")
 
-            # delete file2document
+                # 记录知识图谱文件类型
+                name = file.name.lower()
+                if name == "entities.json":
+                    deleted_graph_types.add("entity")
+                    deleted_graph_file_ids.add(file_id)
+                    print("记录删除实体文件")
+                elif name == "relations.json":
+                    deleted_graph_types.add("relation")
+                    deleted_graph_file_ids.add(file_id)
+                    print("记录删除关系文件")
+
+            # -------------------------
+            # 2. 删除 file2document & document
+            # -------------------------
             informs = File2DocumentService.get_by_file_id(file_id)
             for inform in informs:
                 doc_id = inform.document_id
                 e, doc = DocumentService.get_by_id(doc_id)
                 if not e:
                     return get_data_error_result(message="Document not found!")
+
                 tenant_id = DocumentService.get_tenant_id(doc_id)
                 if not tenant_id:
                     return get_data_error_result(message="Tenant not found!")
+
+                print(f"删除文档: {doc_id}")
                 if not DocumentService.remove_document(doc, tenant_id):
                     return get_data_error_result(
-                        message="Database error (Document removal)!")
+                        message="Database error (Document removal)!"
+                    )
+
             File2DocumentService.delete_by_file_id(file_id)
 
+        # ==========================================================
+        # 3. 统一更新知识图谱统计（关键修正点）
+        # ==========================================================
+        if deleted_graph_types:
+            print(f"\n===== 开始更新知识图谱统计 =====")
+            print(f"删除的图谱文件类型: {deleted_graph_types}")
+            print(f"删除的图谱文件ID: {deleted_graph_file_ids}")
+
+            from api.db.services.knowledge_graph_service import KnowledgeGraphService
+            from api.utils import current_timestamp
+
+            graphs = KnowledgeGraphService.query(tenant_id=current_user.id)
+            if not graphs:
+                print("未找到知识图谱记录，跳过更新")
+            else:
+                graph = graphs[0]
+                current_time = current_timestamp()
+
+                # --------- 全删（实体 + 关系）---------
+                if {"entity", "relation"}.issubset(deleted_graph_types):
+                    print("实体 + 关系文件均被删除 → 重置整个图谱")
+                    KnowledgeGraphService.model.update(
+                        node_num=0,
+                        edge_num=0,
+                        file_ids=[],
+                        update_time=current_time
+                    ).where(
+                        KnowledgeGraphService.model.id == graph.id
+                    ).execute()
+
+                # --------- 只删实体 ---------
+                elif "entity" in deleted_graph_types:
+                    print("仅删除实体文件 → node_num = 0")
+                    KnowledgeGraphService.model.update(
+                        node_num=0,
+                        update_time=current_time
+                    ).where(
+                        KnowledgeGraphService.model.id == graph.id
+                    ).execute()
+
+                # --------- 只删关系 ---------
+                elif "relation" in deleted_graph_types:
+                    print("仅删除关系文件 → edge_num = 0")
+                    KnowledgeGraphService.model.update(
+                        edge_num=0,
+                        update_time=current_time
+                    ).where(
+                        KnowledgeGraphService.model.id == graph.id
+                    ).execute()
+
+                # --------- 同步 file_ids ---------
+                if graph.file_ids:
+                    new_file_ids = [
+                        fid for fid in graph.file_ids
+                        if fid not in deleted_graph_file_ids
+                    ]
+                    print(f"更新 file_ids: {graph.file_ids} → {new_file_ids}")
+
+                    KnowledgeGraphService.model.update(
+                        file_ids=new_file_ids,
+                        update_time=current_time
+                    ).where(
+                        KnowledgeGraphService.model.id == graph.id
+                    ).execute()
+
+        print("\n===== 文件删除流程完成 =====")
         return get_json_result(data=True)
+
     except Exception as e:
+        import logging
+        logging.exception("rm error")
         return server_error_response(e)
+
 
 
 @manager.route('/rename', methods=['POST'])  # noqa: F821
