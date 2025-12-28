@@ -21,6 +21,7 @@ import {
   UseHandleConnectToKnowledgeReturnType,
   UseRenameCurrentFileReturnType,
 } from './hooks';
+import { useHandleDeleteFile } from './use-delete-file';
 import { UseMoveDocumentShowType } from './use-move-file';
 import { isFolderType } from './util';
 
@@ -60,24 +61,37 @@ export function ActionCell({
     showMoveFileModal([record.id]);
   }, [record, showMoveFileModal]);
 
+  const { handleRemoveFile } = useHandleDeleteFile();
+
+  // 添加删除处理函数
+  const handleDelete = useCallback(async () => {
+    const code = await handleRemoveFile([record.id]);
+    return code;
+  }, [handleRemoveFile, record.id]);
+
   return (
     <section className="flex gap-4 items-center text-text-sub-title-invert opacity-0 group-hover:opacity-100 transition-opacity">
-      <Button
-        variant="transparent"
-        className="border-none hover:bg-bg-card text-text-primary"
-        size={'sm'}
-        onClick={handleShowConnectToKnowledgeModal}
-      >
-        <Link2 />
-      </Button>
-      <Button
-        variant="transparent"
-        className="border-none hover:bg-bg-card text-text-primary"
-        size={'sm'}
-        onClick={handleShowMoveFileModal}
-      >
-        <FolderInput />
-      </Button>
+      {record.source_type !== 'knowledgegraph' && (
+        <Button
+          variant="transparent"
+          className="border-none hover:bg-bg-card text-text-primary"
+          size={'sm'}
+          onClick={handleShowConnectToKnowledgeModal}
+        >
+          <Link2 />
+        </Button>
+      )}
+
+      {record.source_type !== 'knowledgegraph' && (
+        <Button
+          variant="transparent"
+          className="border-none hover:bg-bg-card text-text-primary"
+          size={'sm'}
+          onClick={handleShowMoveFileModal}
+        >
+          <FolderInput />
+        </Button>
+      )}
 
       <Button
         variant="transparent"
@@ -138,7 +152,7 @@ export function ActionCell({
           )}
         </DropdownMenuContent>
       </DropdownMenu> */}
-      <ConfirmDeleteDialog>
+      <ConfirmDeleteDialog onOk={handleDelete}>
         <Button
           variant="transparent"
           className="border-none hover:bg-bg-card text-text-primary"

@@ -44,7 +44,6 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActionCell } from './action-cell';
 import { useHandleConnectToKnowledge, useRenameCurrentFile } from './hooks';
-import { KnowledgeCell } from './knowledge-cell';
 import { LinkToDatasetDialog } from './link-to-dataset-dialog';
 import { UseMoveDocumentShowType } from './use-move-file';
 import { useNavigateToOtherFolder } from './use-navigate-to-folder';
@@ -202,11 +201,11 @@ export function FilesTable({
       ),
     },
     {
-      accessorKey: 'kbs_info',
-      header: t('knowledgeBase'),
+      header: t('knowledgeType', { keyPrefix: 'fileManager' }), // 新增翻译键
+      accessorKey: 'source_type',
       cell: ({ row }) => {
-        const value: IFile['kbs_info'] = row.getValue('kbs_info');
-        return <KnowledgeCell value={value}></KnowledgeCell>;
+        const sourceType = row.getValue('source_type');
+        return sourceType === 'knowledgegraph' ? '知识图谱' : '文档库';
       },
     },
     {

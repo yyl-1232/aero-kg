@@ -817,11 +817,12 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
     fileManager: {
       name: '名称',
       uploadDate: '上传日期',
-      knowledgeBase: '文档库',
+      knowledgeBase: '知识类型',
       size: '大小',
       action: '操作',
       addToKnowledge: '链接文档库',
       pleaseSelect: '请选择',
+      knowledgeType: '知识类型',
       newFolder: '新建文件夹',
       uploadFile: '上传文件',
       parseOnCreation: '创建时解析',
