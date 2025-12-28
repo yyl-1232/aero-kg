@@ -41,17 +41,41 @@ const Toast = ({
   type: 'success' | 'error';
   onClose: () => void;
 }) => {
-  const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
-  const Icon = type === 'success' ? CheckCircle : XCircle;
+  const isError = type === 'error';
 
   return (
     <div
-      className={`fixed top-4 right-4 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50 animate-in slide-in-from-top`}
+      className={`
+        fixed top-4 right-4
+        px-4 py-3
+        rounded-lg
+        shadow-lg
+        flex items-center gap-2
+        z-50
+        border
+        ${
+          isError
+            ? 'bg-red-100 border-red-300'
+            : 'bg-green-100 border-green-300'
+        }
+      `}
     >
-      <Icon className="h-5 w-5" />
-      <span>{message}</span>
+      {isError ? (
+        <XCircle className="h-5 w-5 text-red-600" />
+      ) : (
+        <CheckCircle className="h-5 w-5 text-green-600" />
+      )}
+
+      <span
+        className={`font-medium ${isError ? 'text-red-700' : 'text-green-700'}`}
+      >
+        {message}
+      </span>
+
       <button onClick={onClose} className="ml-2">
-        <X className="h-4 w-4" />
+        <X
+          className={`h-4 w-4 ${isError ? 'text-red-600' : 'text-green-600'}`}
+        />
       </button>
     </div>
   );

@@ -1,3 +1,5 @@
+import logging
+
 from api.db.db_models import KnowledgeGraph
 from api.db.services.common_service import CommonService
 from api.db import StatusEnum

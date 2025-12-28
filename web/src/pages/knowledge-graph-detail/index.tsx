@@ -11,17 +11,20 @@ import { Button } from '@/components/ui/button';
 import {
   useFetchKnowledgeBaseConfiguration,
   useKnowledgeBaseId,
+  useRemoveKnowledgeGraph,
 } from '@/hooks/knowledge-hooks';
 import { cn } from '@/lib/utils';
+import { getKnowledgeGraph } from '@/services/knowledge-service';
 import { formatPureDate } from '@/utils/date';
 import { useQueryClient } from '@tanstack/react-query';
-import { FileSearch2, GitGraph, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { message } from 'antd';
+import { FileSearch2, GitGraph, Trash2, Upload } from 'lucide-react';
+import { useEffect, useState } from 'react'; // 添加 useEffect
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'umi';
 import { FileUpload } from './components/file-upload';
-type TabType = 'graph-display' | 'retrieval-test' | 'file-upload';
 
+type TabType = 'graph-display' | 'retrieval-test' | 'file-upload';
 const KnowledgeGraphDetail = () => {
   const { id } = useParams();
   const datasetId = useKnowledgeBaseId();
@@ -30,7 +33,39 @@ const KnowledgeGraphDetail = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('graph-display');
+  const [hasExistingFile, setHasExistingFile] = useState(false);
   console.log('kbData:', kbData);
+  useEffect(() => {
+    const checkExistingFile = async () => {
+      if (kbData?.id) {
+        try {
+          const response = await getKnowledgeGraph(kbData.id);
+          const graphData = response.data?.graph;
+          // 更精确的检查：只有当 graph 包含 nodes 或 edges 数据时才认为已上传
+          const hasGraphData =
+            graphData &&
+            ((graphData.nodes && graphData.nodes.length > 0) ||
+              (graphData.edges && graphData.edges.length > 0));
+          setHasExistingFile(hasGraphData);
+        } catch (error) {
+          setHasExistingFile(false);
+        }
+      }
+    };
+    checkExistingFile();
+  }, [kbData?.id]);
+
+  const { removeKnowledgeGraph } = useRemoveKnowledgeGraph();
+  const handleDeleteExistingFile = async () => {
+    if (kbData?.id) {
+      const ret = await removeKnowledgeGraph();
+      if (ret === 0) {
+        setHasExistingFile(false);
+        message.success('知识图谱文件已删除，可以重新上传');
+      }
+    }
+  };
+
   const handleBackToList = () => {
     navigate('/knowledge-graph');
   };
@@ -163,12 +198,24 @@ const KnowledgeGraphDetail = () => {
             <div className="h-full">
               <h2 className="text-xl font-semibold mb-4">实体-关系文件上传</h2>
               <div className="bg-white rounded-lg border p-4 h-[calc(100%-3rem)]">
-                <FileUpload
-                  onUploadSuccess={() => {
-                    // 刷新文件列表或显示成功消息
-                    console.log('Files uploaded successfully');
-                  }}
-                />
+                {hasExistingFile ? (
+                  <div className="flex flex-col items-center justify-center h-full space-y-4">
+                    <div className="text-gray-600">
+                      <p className="text-lg font-medium">已上传知识图谱文件</p>
+                      <p className="text-sm">如需更新，请先删除现有文件</p>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      onClick={handleDeleteExistingFile}
+                      className="flex items-center gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      删除现有文件
+                    </Button>
+                  </div>
+                ) : (
+                  <FileUpload /> // 保留原有的文件上传组件
+                )}
               </div>
             </div>
           )}

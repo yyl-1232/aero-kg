@@ -1,3 +1,5 @@
+import time
+
 from flask import Blueprint
 from flask_login import login_required, current_user
 from flask import current_app, request
@@ -88,7 +90,34 @@ def delete_graph(graph_id):
         if not graph:
             return get_data_error_result(message="Graph not found or no permission")
 
-            # 删除知识图谱
+            # 删除 .knowledgegraph 下的对应文件夹
+        from api.db.services.file_service import FileService
+        from api.utils import get_uuid
+
+        # 获取根文件夹
+        root_folder = FileService.get_root_folder(current_user.id)
+
+        # 查找 .knowledgegraph 文件夹
+        kg_folder = FileService.query(
+            name=".knowledgegraph",
+            parent_id=root_folder["id"],
+            tenant_id=current_user.id
+        )
+
+        if kg_folder:
+            kg_folder = kg_folder[0]
+            # 查找对应的图谱文件夹
+            graph_folder = FileService.query(
+                name=graph[0].name,
+                parent_id=kg_folder.id,
+                tenant_id=current_user.id
+            )
+
+            if graph_folder:
+                # 级联删除图谱文件夹及其所有内容
+                FileService.delete_folder_by_pf_id(current_user.id, graph_folder.id)
+
+                # 删除知识图谱
         if not KnowledgeGraphService.delete_by_id(graph_id):
             return get_data_error_result(message="Delete graph error")
 
@@ -101,6 +130,7 @@ def delete_graph(graph_id):
 def test():
     return get_json_result(data="Graph app is working")
 
+
 @manager.route('/<graph_id>/upload_files', methods=['POST'])
 @login_required
 def upload_graph_files(graph_id):
@@ -108,10 +138,13 @@ def upload_graph_files(graph_id):
     from api.db.services.file_service import FileService
     from api.utils import get_uuid
     from rag.utils.storage_factory import STORAGE_IMPL
+    import json
+
     current_app.logger.warning(
         f"[UPLOAD_FILES] HIT graph_id={graph_id}, "
         f"method={request.method}, user={current_user.id}"
     )
+
     # 验证图谱权限
     graph = KnowledgeGraphService.query(
         id=graph_id,
@@ -126,7 +159,28 @@ def upload_graph_files(graph_id):
         return get_json_result(data=False, message='No files part!', code=400)
 
     files = request.files.getlist('files')
+    uploaded_filenames = [file.filename for file in files if file.filename != '']
+    duplicate_files = []
+    seen_files = set()
 
+    for filename in uploaded_filenames:
+        if filename in seen_files:
+            duplicate_files.append(filename)
+        seen_files.add(filename)
+
+    if duplicate_files:
+        return get_data_error_result(
+            message=f"Duplicate files detected: {', '.join(set(duplicate_files))}. Each file type can only be uploaded once."
+        )
+
+    for file in files:
+        if file.filename == 'entities.json':
+            if graph[0].node_num > 0:
+                return get_data_error_result(message="Knowledge entity files already exist. Please delete them first.")
+        elif file.filename == 'relations.json':
+            if graph[0].edge_num > 0:
+                return get_data_error_result(
+                    message="Knowledge relation files already exist. Please delete them first.")
     try:
         # 获取根文件夹
         root_folder = FileService.get_root_folder(current_user.id)
@@ -147,7 +201,7 @@ def upload_graph_files(graph_id):
                 "location": "",
                 "size": 0,
                 "type": FileType.FOLDER.value,
-                "source_type": FileSource.KNOWLEDGEGRAPH  # 添加这行
+                "source_type": FileSource.KNOWLEDGEGRAPH
             })
         else:
             kg_folder = kg_folder[0]
@@ -168,12 +222,15 @@ def upload_graph_files(graph_id):
                 "location": "",
                 "size": 0,
                 "type": FileType.FOLDER.value,
-                "source_type": FileSource.KNOWLEDGEGRAPH  # 添加这行
+                "source_type": FileSource.KNOWLEDGEGRAPH
             })
         else:
             graph_folder = graph_folder[0]
 
         file_results = []
+        entities_data = None
+        relations_data = None
+
         for file in files:
             if file.filename == '':
                 continue
@@ -191,6 +248,17 @@ def upload_graph_files(graph_id):
             print(f"File {file.filename} size: {len(blob)} bytes")
             STORAGE_IMPL.put(graph_folder.id, location, blob)
             print(f"Stored file at: {graph_folder.id}/{location}")
+
+            # 解析文件内容获取统计信息
+            try:
+                file_content = json.loads(blob.decode('utf-8'))
+                if file.filename == 'entities.json':
+                    entities_data = file_content
+                elif file.filename == 'relations.json':
+                    relations_data = file_content
+            except json.JSONDecodeError as e:
+                print(f"Error parsing {file.filename}: {e}")
+
             file_record = {
                 "id": get_uuid(),
                 "parent_id": graph_folder.id,
@@ -200,11 +268,25 @@ def upload_graph_files(graph_id):
                 "name": file.filename,
                 "location": location,
                 "size": len(blob),
-                "source_type": FileSource.KNOWLEDGEGRAPH  # 添加这行
+                "source_type": FileSource.KNOWLEDGEGRAPH
             }
             file_record = FileService.insert(file_record)
             print(f"Database record created: {file_record.id}")
             file_results.append(file_record.to_json())
+
+            # 更新知识图谱统计信息
+        node_num = len(entities_data) if entities_data else graph[0].node_num  # 保留原有值
+        edge_num = len(relations_data) if relations_data else graph[0].edge_num  # 保留原有值
+
+        update_data = {
+            "node_num": node_num,
+            "edge_num": edge_num,
+            "update_time": int(time.time() * 1000)  # 当前时间戳
+        }
+
+        # 更新数据库
+        KnowledgeGraphService.update_by_id(graph_id, update_data)
+        print(f"Updated graph {graph_id}: {node_num} nodes, {edge_num} edges")
 
         return get_json_result(data=file_results)
     except Exception as e:
