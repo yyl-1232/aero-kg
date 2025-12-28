@@ -30,8 +30,10 @@ import {
 import { FolderInput, Trash2 } from 'lucide-react';
 import styles from './index.less';
 
-interface IProps
-  extends Pick<IListResult, 'searchString' | 'handleInputChange'> {
+interface IProps extends Pick<
+  IListResult,
+  'searchString' | 'handleInputChange'
+> {
   selectedRowKeys: string[];
   showFolderCreateModal: () => void;
   showFileUploadModal: () => void;
@@ -54,7 +56,8 @@ const FileToolbar = ({
   const parentFolderList = useFetchParentFolderList();
   const isKnowledgeBase =
     parentFolderList.at(-1)?.source_type === 'knowledgebase';
-
+  const isKnowledgeGraph =
+    parentFolderList.at(-1)?.source_type === 'knowledgegraph';
   const itemRender: BreadcrumbProps['itemRender'] = (
     currentRoute,
     params,
@@ -152,7 +155,7 @@ const FileToolbar = ({
     <div className={styles.filter}>
       <Breadcrumb items={breadcrumbItems} itemRender={itemRender} />
       <Space>
-        {isKnowledgeBase || (
+        {isKnowledgeBase || isKnowledgeGraph || (
           <Dropdown
             menu={{ items }}
             placement="bottom"
@@ -176,7 +179,7 @@ const FileToolbar = ({
           prefix={<SearchOutlined />}
         />
 
-        {isKnowledgeBase || (
+        {isKnowledgeBase || isKnowledgeGraph || (
           <Dropdown menu={{ items: actionItems }} trigger={['click']}>
             <Button type="primary" icon={<PlusOutlined />}>
               {t('addFile')}

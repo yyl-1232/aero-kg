@@ -97,6 +97,7 @@ class ParserType(StrEnum):
 class FileSource(StrEnum):
     LOCAL = ""
     KNOWLEDGEBASE = "knowledgebase"
+    KNOWLEDGEGRAPH = "knowledgegraph"  # 添加这行
     S3 = "s3"
 
 

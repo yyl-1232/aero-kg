@@ -2,9 +2,10 @@ from flask import Blueprint
 from flask_login import login_required, current_user
 from flask import current_app, request
 from api.db.services.file_service import FileService
-from api.utils.api_utils import server_error_response, get_data_error_result, validate_request, get_json_result
+from api.utils.api_utils import server_error_response, get_data_error_result, validate_request, get_json_result, \
+    token_required
 from api.utils import get_uuid
-from api.db import StatusEnum, FileType
+from api.db import StatusEnum, FileType, FileSource
 from api.db.services.knowledge_graph_service import KnowledgeGraphService
 from api.constants import DATASET_NAME_LIMIT
 from api.db.services import duplicate_name
@@ -19,6 +20,10 @@ from api.db.services import duplicate_name
 @login_required
 @validate_request("name", "description")
 def create_graph():
+    current_app.logger.warning(
+        f"[Create_FILES] HIT graph_id=, "
+        f"method={request.method}, user={current_user.id}"
+    )
     req = request.json
     graph_name = req["name"]
     if not isinstance(graph_name, str):
@@ -92,6 +97,10 @@ def delete_graph(graph_id):
         return server_error_response(e)
 
 
+@manager.route('/test', methods=['GET'])
+def test():
+    return get_json_result(data="Graph app is working")
+
 @manager.route('/<graph_id>/upload_files', methods=['POST'])
 @login_required
 def upload_graph_files(graph_id):
@@ -137,7 +146,8 @@ def upload_graph_files(graph_id):
                 "name": ".knowledgegraph",
                 "location": "",
                 "size": 0,
-                "type": FileType.FOLDER.value
+                "type": FileType.FOLDER.value,
+                "source_type": FileSource.KNOWLEDGEGRAPH  # 添加这行
             })
         else:
             kg_folder = kg_folder[0]
@@ -157,7 +167,8 @@ def upload_graph_files(graph_id):
                 "name": graph[0].name,
                 "location": "",
                 "size": 0,
-                "type": FileType.FOLDER.value
+                "type": FileType.FOLDER.value,
+                "source_type": FileSource.KNOWLEDGEGRAPH  # 添加这行
             })
         else:
             graph_folder = graph_folder[0]
@@ -177,8 +188,9 @@ def upload_graph_files(graph_id):
                 location += "_"
 
             blob = file.read()
+            print(f"File {file.filename} size: {len(blob)} bytes")
             STORAGE_IMPL.put(graph_folder.id, location, blob)
-
+            print(f"Stored file at: {graph_folder.id}/{location}")
             file_record = {
                 "id": get_uuid(),
                 "parent_id": graph_folder.id,
@@ -188,8 +200,10 @@ def upload_graph_files(graph_id):
                 "name": file.filename,
                 "location": location,
                 "size": len(blob),
+                "source_type": FileSource.KNOWLEDGEGRAPH  # 添加这行
             }
             file_record = FileService.insert(file_record)
+            print(f"Database record created: {file_record.id}")
             file_results.append(file_record.to_json())
 
         return get_json_result(data=file_results)
