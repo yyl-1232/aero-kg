@@ -3,6 +3,8 @@ import time
 from flask import Blueprint
 from flask_login import login_required, current_user
 from flask import current_app, request
+
+from api.db.services.document_service import DocumentService
 from api.db.services.file_service import FileService
 from api.utils.api_utils import server_error_response, get_data_error_result, validate_request, get_json_result, \
     token_required
@@ -139,6 +141,7 @@ def upload_graph_files(graph_id):
     from api.utils import get_uuid
     from rag.utils.storage_factory import STORAGE_IMPL
     import json
+    import time  # 需要导入time模块
 
     current_app.logger.warning(
         f"[UPLOAD_FILES] HIT graph_id={graph_id}, "
@@ -278,16 +281,49 @@ def upload_graph_files(graph_id):
         node_num = len(entities_data) if entities_data else graph[0].node_num  # 保留原有值
         edge_num = len(relations_data) if relations_data else graph[0].edge_num  # 保留原有值
 
+        # 新增：收集文件ID列表
+        uploaded_file_ids = [file["id"] for file in file_results]
+        current_file_ids = graph[0].file_ids or []  # 获取现有的file_ids，如果为空则使用空列表
+        all_file_ids = current_file_ids + uploaded_file_ids  # 合并现有文件ID和新上传的文件ID
+
         update_data = {
             "node_num": node_num,
             "edge_num": edge_num,
+            "file_ids": all_file_ids,  # 新增：更新file_ids字段
             "update_time": int(time.time() * 1000)  # 当前时间戳
         }
 
         # 更新数据库
         KnowledgeGraphService.update_by_id(graph_id, update_data)
-        print(f"Updated graph {graph_id}: {node_num} nodes, {edge_num} edges")
+        print(f"Updated graph {graph_id}: {node_num} nodes, {edge_num} edges, {len(all_file_ids)} files")
 
         return get_json_result(data=file_results)
     except Exception as e:
         return server_error_response(e)
+
+@manager.route('/<graph_id>/files', methods=['GET'])
+@login_required
+def get_graph_files(graph_id):
+    """获取知识图谱关联的文件列表"""
+    graph = KnowledgeGraphService.get_by_id(graph_id)
+    if not graph or not graph[1]:
+        return get_data_error_result(message="Graph not found")
+
+    file_ids = graph[1].file_ids or []
+    files = DocumentService.get_by_ids(file_ids)
+    return get_json_result(data=files)
+
+@manager.route('/<graph_id>/files/<file_id>', methods=['DELETE'])
+@login_required
+def remove_graph_file(graph_id, file_id):
+    """移除知识图谱中的文件关联"""
+    graph = KnowledgeGraphService.get_by_id(graph_id)
+    if not graph or not graph[1]:
+        return get_data_error_result(message="Graph not found")
+
+    file_ids = graph[1].file_ids or []
+    if file_id in file_ids:
+        file_ids.remove(file_id)
+        KnowledgeGraphService.update_by_id(graph_id, {"file_ids": file_ids})
+
+    return get_json_result(data=True)

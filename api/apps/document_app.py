@@ -31,6 +31,7 @@ from api.db.services import duplicate_name
 from api.db.services.document_service import DocumentService, doc_upload_and_parse
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
+from api.db.services.knowledge_graph_service import KnowledgeGraphService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.task_service import TaskService, cancel_all_task_of, queue_tasks
 from api.db.services.user_service import UserTenantService
@@ -69,7 +70,6 @@ def upload():
     if not e:
         raise LookupError("Can't find this knowledgebase!")
     err, files = FileService.upload_document(kb, file_objs, current_user.id)
-
     if err:
         return get_json_result(data=files, message="\n".join(err), code=settings.RetCode.SERVER_ERROR)
 

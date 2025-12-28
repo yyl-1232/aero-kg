@@ -671,6 +671,7 @@ class KnowledgeGraph(DataBaseModel):
     status = CharField(max_length=1, null=True, help_text="0: wasted, 1: validate", default="1", index=True)
     create_time = BigIntegerField(null=True)
     update_time = BigIntegerField(null=True)
+    file_ids = JSONField(null=True, help_text="Associated file IDs list")
     class Meta:
         db_table = "knowledge_graph"
 
