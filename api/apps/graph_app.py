@@ -81,13 +81,13 @@ def list_graphs():
 def delete_graph(graph_id):
     try:
         # 验证权限
-        graph = KnowledgeGraphService.query(
+        graphs = KnowledgeGraphService.query(
             id=graph_id,
             tenant_id=current_user.id,
             status="1"
         )
 
-        if not graph:
+        if not graphs or len(graphs) == 0:
             return get_data_error_result(message="Graph not found or no permission")
 
             # 删除 .knowledgegraph 下的对应文件夹
@@ -108,14 +108,14 @@ def delete_graph(graph_id):
             kg_folder = kg_folder[0]
             # 查找对应的图谱文件夹
             graph_folder = FileService.query(
-                name=graph[0].name,
+                name=graphs[0].name,
                 parent_id=kg_folder.id,
                 tenant_id=current_user.id
             )
 
             if graph_folder:
                 # 级联删除图谱文件夹及其所有内容
-                FileService.delete_folder_by_pf_id(current_user.id, graph_folder.id)
+                FileService.delete_folder_by_pf_id(current_user.id, graph_folder[0].id)
 
                 # 删除知识图谱
         if not KnowledgeGraphService.delete_by_id(graph_id):
