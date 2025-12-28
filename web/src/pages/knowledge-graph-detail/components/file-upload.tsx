@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { getAuthorization } from '@/utils/authorization-util';
+import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, FileText, Info, Upload, X, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'umi';
@@ -385,7 +386,7 @@ export const FileUpload = ({ onUploadSuccess }: FileUploadProps) => {
 
     setEntityFile(file);
   };
-
+  const queryClient = useQueryClient();
   const handleEntityUpload = async () => {
     if (!entityFile || !graphId) return;
 
@@ -407,6 +408,7 @@ export const FileUpload = ({ onUploadSuccess }: FileUploadProps) => {
       if (response.ok && result.code === 0) {
         showToast('实体文件上传成功', 'success');
         setEntityFile(null);
+        queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeDetail'] });
         onUploadSuccess?.();
       } else {
         showToast(result.message || '实体文件上传失败', 'error');
@@ -486,6 +488,7 @@ export const FileUpload = ({ onUploadSuccess }: FileUploadProps) => {
       if (response.ok && result.code === 0) {
         showToast('关系文件上传成功', 'success');
         setRelationFile(null);
+        queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeDetail'] });
         onUploadSuccess?.();
       } else {
         showToast(result.message || '关系文件上传失败', 'error');
