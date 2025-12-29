@@ -7,7 +7,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Authorization } from '@/constants/authorization';
 import { useFetchKnowledgeGraph } from '@/hooks/knowledge-hooks';
+import { getAuthorization } from '@/utils/authorization-util';
 import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -663,11 +665,11 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
 
     try {
       const depthNum = Math.min(3, Math.max(1, Number(searchDepth) || 2));
-      const res = await fetch(`/api/v1/kb/${kbId}/knowledge_graph/subgraph`, {
+      const res = await fetch(`/v1/kb/${kbId}/knowledge_graph/subgraph`, {
         method: 'POST',
         headers: {
+          [Authorization]: getAuthorization(),
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
         },
         body: JSON.stringify({
           entity_name: keyword,
@@ -695,7 +697,15 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
       setIsSearching(false);
     }
   };
-
+  const handleResetView = () => {
+    setSearchEntity('');
+    setSelectedNode(null);
+    setSelectedEdge(null);
+    const graph = kbData?.graph;
+    if (graph) {
+      setGraphData(graph);
+    }
+  };
   const hasGraph = useMemo(
     () => graphData.nodes.length > 0 || graphData.edges.length > 0,
     [graphData],
@@ -746,6 +756,9 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
             disabled={isSearching || !searchEntity.trim()}
           >
             {isSearching ? '查询中...' : '查询子图'}
+          </Button>
+          <Button variant="outline" onClick={handleResetView}>
+            重置视图
           </Button>
           <Button variant="outline" onClick={handleRefreshGraph}>
             刷新图谱
