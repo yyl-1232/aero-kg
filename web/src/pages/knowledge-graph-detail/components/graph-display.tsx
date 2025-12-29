@@ -631,6 +631,8 @@ function DetailPanel({
 // 主组件
 export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
   const [graphData, setGraphData] = useState<GraphData>(EMPTY_GRAPH);
+  const [originalGraphData, setOriginalGraphData] =
+    useState<GraphData>(EMPTY_GRAPH); // 新增：保存原始图谱数据
   const [searchEntity, setSearchEntity] = useState('');
   const [searchDepth, setSearchDepth] = useState('2');
   const [isSearching, setIsSearching] = useState(false);
@@ -646,6 +648,7 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
     const graph = knowledgeGraph?.graph;
     if (graph && Array.isArray(graph.nodes) && Array.isArray(graph.edges)) {
       setGraphData(graph);
+      setOriginalGraphData(graph); // 保存原始图谱数据
     }
   }, [knowledgeGraph]);
 
@@ -701,10 +704,8 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
     setSearchEntity('');
     setSelectedNode(null);
     setSelectedEdge(null);
-    const graph = kbData?.graph;
-    if (graph) {
-      setGraphData(graph);
-    }
+    setGraphData(originalGraphData); // 使用保存的原始图谱数据
+    queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeGraph'] });
   };
   const hasGraph = useMemo(
     () => graphData.nodes.length > 0 || graphData.edges.length > 0,
