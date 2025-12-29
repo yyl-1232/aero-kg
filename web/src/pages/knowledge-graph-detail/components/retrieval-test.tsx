@@ -50,7 +50,7 @@ export default function RetrievalTest({
   const [subgraphDepth, setSubgraphDepth] = useState(2);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<any>(null);
-
+  const [recallSubgraphCount, setRecallSubgraphCount] = useState(3);
   const handleTest = async () => {
     setLoading(true);
     try {
@@ -67,6 +67,7 @@ export default function RetrievalTest({
             question,
             similarity_threshold: similarityThreshold,
             subgraph_depth: subgraphDepth,
+            recall_subgraph_count: recallSubgraphCount,
             mode: 'text_match',
           }),
         },
@@ -152,6 +153,36 @@ export default function RetrievalTest({
                     }
                     className="w-16 h-8 text-center"
                     max={5}
+                    min={1}
+                    step={1}
+                  />
+                </div>
+              </div>
+              {/* 召回子图数量 */}
+              <div>
+                <div className="flex items-center gap-2">
+                  <Label>召回子图数量</Label>
+                  <Tip content="控制最多返回的子图数量。数量越大，覆盖的关联路径越多，但计算开销和噪声也会增加" />
+                </div>
+                <div className="flex items-center gap-4 mt-2">
+                  <SingleFormSlider
+                    value={recallSubgraphCount}
+                    onChange={setRecallSubgraphCount}
+                    max={10}
+                    min={1}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <Input
+                    type="number"
+                    value={recallSubgraphCount}
+                    onChange={(e) =>
+                      setRecallSubgraphCount(
+                        parseInt(e.target.value || '1', 10),
+                      )
+                    }
+                    className="w-16 h-8 text-center"
+                    max={10}
                     min={1}
                     step={1}
                   />

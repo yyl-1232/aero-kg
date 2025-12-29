@@ -16,6 +16,7 @@
 import json
 import logging
 
+import requests
 from flask import request
 from flask_login import login_required, current_user
 
@@ -590,6 +591,7 @@ def knowledge_graph_retrieval_test(kb_id):
     question = req["question"]
     similarity_threshold = float(req.get("similarity_threshold", 0.3))
     subgraph_depth = int(req.get("subgraph_depth", 2))
+    recallSubgraphCount = int(req.get("recallSubgraphCount", 3))
     mode = req.get("mode", "text_match")
 
     print("========== knowledge_graph_retrieval_test START ==========")
@@ -606,7 +608,7 @@ def knowledge_graph_retrieval_test(kb_id):
         if not e:
             return get_data_error_result(message="Knowledge graph not found!")
 
-        # 校验用户权限
+            # 校验用户权限
         tenants = UserTenantService.query(user_id=current_user.id)
         tenant_ids = []
         for tenant in tenants:
@@ -629,16 +631,108 @@ def knowledge_graph_retrieval_test(kb_id):
 
         # 使用jieba对问题分词
         question_tokens = list(jieba.cut_for_search(question))
+        print("Question tokens:", question_tokens)
 
+        # 获取知识图谱数据
+        graph_response = knowledge_graph(kb_id)
+        if graph_response.status_code != 200:
+            return get_data_error_result(message="Failed to get knowledge graph data")
 
-        # 构建返回结果
+        graph_data = graph_response.get_json()['data']
+        graph = graph_data.get('graph', {})
+        nodes = graph.get('nodes', [])
+        edges = graph.get('edges', [])
+
+        print(f"Graph loaded: {len(nodes)} nodes, {len(edges)} edges")
+
+        # 实体匹配：计算分词结果与图谱实体的相似度
+        matched_entities = []
+        entity_similarity_map = {}
+
+        for node in nodes:
+            entity_name = node.get('entity_name', '').lower()
+            entity_desc = node.get('description', '').lower()
+
+            # 计算与每个token的相似度
+            max_similarity = 0.0
+            for token in question_tokens:
+                token_lower = token.lower()
+
+                # 简单的字符串包含相似度计算
+                if token_lower in entity_name:
+                    similarity = len(token_lower) / len(entity_name) if entity_name else 0
+                elif token_lower in entity_desc:
+                    similarity = len(token_lower) / len(entity_desc) if entity_desc else 0
+                else:
+                    # 使用编辑距离计算相似度
+                    similarity = 1 - (edit_distance(token_lower, entity_name) / max(len(token_lower),
+                                                                                    len(entity_name))) if entity_name else 0
+
+                max_similarity = max(max_similarity, similarity)
+
+            if max_similarity >= similarity_threshold:
+                matched_entities.append({
+                    'id': node.get('id'),
+                    'entity_name': node.get('entity_name'),
+                    'entity_type': node.get('entity_type'),
+                    'similarity': max_similarity,
+                    'description': node.get('description')
+                })
+                entity_similarity_map[node.get('id')] = max_similarity
+
+                # 按相似度排序
+        matched_entities.sort(key=lambda x: x['similarity'], reverse=True)
+        print(f"Matched entities: {len(matched_entities)}")
+
+        # 获取相关关系
+        matched_entity_ids = {entity['id'] for entity in matched_entities}
+        matched_relationships = []
+
+        for edge in edges:
+            source_id = edge.get('source')
+            target_id = edge.get('target')
+
+            if source_id in matched_entity_ids or target_id in matched_entity_ids:
+                matched_relationships.append({
+                    'source': source_id,
+                    'target': target_id,
+                    'description': edge.get('description'),
+                    'weight': edge.get('weight', 0)
+                })
+
+                # 获取子图数据
+        subgraph_data = {}
+        if matched_entities:
+            # 构建子图请求
+            subgraph_request = {
+                'entities': [entity['id'] for entity in matched_entities[:recallSubgraphCount]],  # 限制数量避免过大
+                'depth': subgraph_depth
+            }
+
+            # 调用子图接口（这里假设存在该接口）
+            try:
+                subgraph_response = requests.post(
+                    f"/{kb_id}/knowledge_graph/subgraph",
+                    json=subgraph_request,
+                    headers={'Authorization': request.headers.get('Authorization')}
+                )
+                if subgraph_response.status_code == 200:
+                    subgraph_data = subgraph_response.json().get('data', {})
+            except Exception as e:
+                print(f"Failed to get subgraph: {e}")
+                # 如果子图接口不存在，手动构建简单子图
+                subgraph_data = {
+                    'nodes': [node for node in nodes if node.get('id') in matched_entity_ids],
+                    'edges': matched_relationships
+                }
+
+                # 构建返回结果
         response_data = {
-            "entities": [],
-            "relationships": [],
-            "subgraph": {},
-            "description": ""
+            "entities": matched_entities,
+            "relationships": matched_relationships,
+            "subgraph": subgraph_data,
+            "description": f"基于问题'{question}'找到{len(matched_entities)}个相关实体，{len(matched_relationships)}个相关关系"
         }
-
 
         print("========== knowledge_graph_retrieval_test END ==========")
         return get_json_result(data=response_data)
@@ -646,6 +740,27 @@ def knowledge_graph_retrieval_test(kb_id):
     except Exception as e:
         logging.exception(f"知识图谱检索测试失败: {e}")
         return server_error_response(e)
+
+
+def edit_distance(s1, s2):
+    """计算编辑距离"""
+    if len(s1) < len(s2):
+        return edit_distance(s2, s1)
+
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
 
 
 # @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
