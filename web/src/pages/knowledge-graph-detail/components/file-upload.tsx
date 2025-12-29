@@ -2,21 +2,17 @@ import { Button } from '@/components/ui/button';
 import { getAuthorization } from '@/utils/authorization-util';
 import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, FileText, Info, Upload, X, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'umi';
 
-interface FileUploadProps {
-  onUploadSuccess?: () => void;
-}
-
-// 示例数据
+/* ================= 示例数据 ================= */
 const entitiesExample = [
   {
     id: 1,
     entity_kwd: '高超声速飞行器',
     description:
       '高超声速飞行器是指在大气层内以马赫数大于5飞行、具有显著空气动力与热耦合效应的飞行器。',
-    source: ['[web:1]', '[web:14]', '[web:17]'],
+    source: ['[web:1]', '[web:14]'],
   },
 ];
 
@@ -28,11 +24,11 @@ const relationsExample = [
   },
 ];
 
-// 必填字段定义
+/* ================= 校验规则 ================= */
 const requiredEntityFields = ['id', 'entity_kwd', 'description', 'source'];
 const requiredRelationFields = ['head_entity_id', 'tail_entity_id', 'relation'];
 
-// Toast组件
+/* ================= Toast ================= */
 const Toast = ({
   message,
   type,
@@ -43,532 +39,342 @@ const Toast = ({
   onClose: () => void;
 }) => {
   const isError = type === 'error';
-
   return (
     <div
-      className={`
-        fixed top-4 right-4
-        px-4 py-3
-        rounded-lg
-        shadow-lg
-        flex items-center gap-2
-        z-50
-        border
-        ${
-          isError
-            ? 'bg-red-100 border-red-300'
-            : 'bg-green-100 border-green-300'
-        }
-      `}
+      className={`fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg border shadow-lg transition-all duration-300 transform ${
+        isError
+          ? 'bg-red-50 border-red-200 text-red-700'
+          : 'bg-green-50 border-green-200 text-green-700'
+      }`}
     >
       {isError ? (
-        <XCircle className="h-5 w-5 text-red-600" />
+        <XCircle className="h-5 w-5 flex-shrink-0" />
       ) : (
-        <CheckCircle className="h-5 w-5 text-green-600" />
+        <CheckCircle className="h-5 w-5 flex-shrink-0" />
       )}
-
-      <span
-        className={`font-medium ${isError ? 'text-red-700' : 'text-green-700'}`}
+      <span className="font-medium flex-1">{message}</span>
+      <button
+        onClick={onClose}
+        className="flex-shrink-0 rounded-full p-1 hover:bg-gray-100 transition-colors"
       >
-        {message}
-      </span>
-
-      <button onClick={onClose} className="ml-2">
-        <X
-          className={`h-4 w-4 ${isError ? 'text-red-600' : 'text-green-600'}`}
-        />
+        <X className="h-4 w-4" />
       </button>
     </div>
   );
 };
 
-// JSON悬浮提示框
-const HoverJsonExample = ({ data }: { data: any }) => {
+/* ================= Hover JSON 自适应 ================= */
+const HoverJsonExample = ({
+  data,
+  parentRef,
+}: {
+  data: any;
+  parentRef: React.RefObject<HTMLDivElement>;
+}) => {
+  const [position, setPosition] = useState<'left' | 'right'>('left');
+
+  useEffect(() => {
+    if (!parentRef.current) return;
+    const rect = parentRef.current.getBoundingClientRect();
+    // 当 Info 图标靠右，超过屏幕宽度 - 悬浮框宽度时向左展开
+    if (rect.left + 320 > window.innerWidth) {
+      setPosition('right');
+    } else {
+      setPosition('left');
+    }
+  }, [parentRef]);
+
   return (
-    <div className="absolute left-0 top-6 z-50 bg-white border border-gray-200 shadow-xl p-4 rounded-lg w-80 max-h-64 overflow-auto text-xs">
-      <pre className="text-gray-700">{JSON.stringify(data, null, 2)}</pre>
+    <div
+      className={`
+        absolute top-full mt-1 z-50 w-80 max-h-64 overflow-auto rounded-lg border border-gray-200 bg-white p-4 text-xs shadow-xl
+        ${position === 'left' ? 'left-0' : 'right-0'}
+      `}
+    >
+      <pre className="whitespace-pre-wrap break-all">
+        {JSON.stringify(data, null, 2)}
+      </pre>
     </div>
   );
 };
 
-// JSON字段校验 - 实体
-const validateEntityJson = async (
-  file: File,
-): Promise<{ valid: boolean; error?: string }> => {
+/* ================= JSON 校验 ================= */
+const validateEntityJson = async (file: File) => {
   try {
-    const text = await file.text();
-    const data = JSON.parse(text);
-
+    const data = JSON.parse(await file.text());
     if (!Array.isArray(data)) return { valid: false, error: 'JSON必须是数组' };
-
-    for (const [index, item] of data.entries()) {
-      for (const field of requiredEntityFields) {
-        if (!(field in item))
-          return {
-            valid: false,
-            error: `第${index + 1}条记录缺少字段: ${field}`,
-          };
+    for (const [i, item] of data.entries()) {
+      for (const f of requiredEntityFields) {
+        if (!(f in item))
+          return { valid: false, error: `第${i + 1}条缺少字段 ${f}` };
       }
-      if (typeof item.id !== 'number')
-        return { valid: false, error: `第${index + 1}条记录: id必须是数字` };
-      if (typeof item.entity_kwd !== 'string')
-        return {
-          valid: false,
-          error: `第${index + 1}条记录: entity_kwd必须是字符串`,
-        };
-      if (typeof item.description !== 'string')
-        return {
-          valid: false,
-          error: `第${index + 1}条记录: description必须是字符串`,
-        };
-      if (!Array.isArray(item.source))
-        return {
-          valid: false,
-          error: `第${index + 1}条记录: source必须是数组`,
-        };
     }
-
     return { valid: true };
-  } catch (err) {
-    return { valid: false, error: 'JSON解析错误' };
+  } catch {
+    return { valid: false, error: 'JSON解析失败' };
   }
 };
 
-// JSON字段校验 - 关系
-const validateRelationJson = async (
-  file: File,
-): Promise<{ valid: boolean; error?: string }> => {
+const validateRelationJson = async (file: File) => {
   try {
-    const text = await file.text();
-    const data = JSON.parse(text);
-
+    const data = JSON.parse(await file.text());
     if (!Array.isArray(data)) return { valid: false, error: 'JSON必须是数组' };
-
-    for (const [index, item] of data.entries()) {
-      for (const field of requiredRelationFields) {
-        if (!(field in item))
-          return {
-            valid: false,
-            error: `第${index + 1}条记录缺少字段: ${field}`,
-          };
+    for (const [i, item] of data.entries()) {
+      for (const f of requiredRelationFields) {
+        if (!(f in item))
+          return { valid: false, error: `第${i + 1}条缺少字段 ${f}` };
       }
-      if (typeof item.head_entity_id !== 'number')
-        return {
-          valid: false,
-          error: `第${index + 1}条记录: head_entity_id必须是数字`,
-        };
-      if (typeof item.tail_entity_id !== 'number')
-        return {
-          valid: false,
-          error: `第${index + 1}条记录: tail_entity_id必须是数字`,
-        };
-      if (typeof item.relation !== 'string')
-        return {
-          valid: false,
-          error: `第${index + 1}条记录: relation必须是字符串`,
-        };
     }
-
     return { valid: true };
-  } catch (err) {
-    return { valid: false, error: 'JSON解析错误' };
+  } catch {
+    return { valid: false, error: 'JSON解析失败' };
   }
 };
 
-// 单个上传卡片组件
+/* ================= UploadCard ================= */
+interface UploadCardProps {
+  title: string;
+  description: string;
+  example: any;
+  file: File | null;
+  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  onRemove: () => void;
+  onDrop: (e: React.DragEvent<HTMLDivElement>) => Promise<void>;
+  isDragging: boolean;
+  setIsDragging: (value: boolean) => void;
+  color: string;
+}
+
 const UploadCard = ({
   title,
-  type,
+  description,
   example,
   file,
   onFileChange,
   onRemove,
-  onUpload,
-  uploading,
-  isDragging,
-  onDragOver,
-  onDragLeave,
   onDrop,
+  isDragging,
+  setIsDragging,
   color,
-}: {
-  title: string;
-  type: 'entities' | 'relations';
-  example: any;
-  file: File | null;
-  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onRemove: () => void;
-  onUpload: () => void;
-  uploading: boolean;
-  isDragging: boolean;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragLeave: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent) => void;
-  color: string;
-}) => {
+}: UploadCardProps) => {
   const [hovered, setHovered] = useState(false);
+  const infoRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="flex-1 p-6 bg-white rounded-xl border-2 border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-      <div className="space-y-4">
-        {/* 标题和说明 */}
-        <div className="flex items-center justify-between">
-          <h3 className={`text-lg font-semibold ${color}`}>{title}</h3>
-          <div className="relative">
-            <div
-              onMouseEnter={() => setHovered(true)}
-              onMouseLeave={() => setHovered(false)}
-            >
-              <Info
-                className={`h-5 w-5 ${color} cursor-pointer hover:scale-110 transition-transform`}
-              />
-            </div>
-            {hovered && <HoverJsonExample data={example} />}
-          </div>
-        </div>
-
-        <p className="text-sm text-gray-600">
-          {type === 'entities'
-            ? '上传包含实体信息的JSON文件'
-            : '上传包含关系信息的JSON文件'}
-        </p>
-
-        {/* 拖拽上传区域 */}
+    <div className="flex-1 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-all duration-300 hover:shadow-md hover:translate-y-[-2px]">
+      <div className="flex justify-between items-center mb-2">
+        <h3 className={`text-lg font-semibold ${color}`}>{title}</h3>
         <div
-          className={`border-2 border-dashed rounded-lg p-8 transition-all ${
-            isDragging
-              ? `${color.replace('text', 'border')} bg-opacity-10 ${color.replace('text', 'bg')}`
-              : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
-          }`}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
+          ref={infoRef}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          className="relative"
         >
-          <div className="text-center">
-            <Upload
-              className={`mx-auto h-10 w-10 ${isDragging ? color : 'text-gray-400'} transition-colors`}
-            />
-            <div className="mt-3">
-              <label htmlFor={`file-upload-${type}`} className="cursor-pointer">
-                <span className="block text-sm font-medium text-gray-900 hover:text-blue-600 transition-colors">
-                  拖拽文件到此处或点击上传
-                </span>
-                <input
-                  id={`file-upload-${type}`}
-                  type="file"
-                  className="sr-only"
-                  accept=".json,application/json"
-                  onChange={onFileChange}
-                />
-              </label>
-              <p className="mt-1 text-xs text-gray-500">仅支持 .json 格式</p>
-            </div>
-          </div>
+          <Info
+            className={`h-5 w-5 cursor-pointer ${color} transition-colors hover:opacity-80`}
+          />
+          {hovered && <HoverJsonExample data={example} parentRef={infoRef} />}
         </div>
-
-        {/* 文件信息 */}
-        {file && (
-          <div className="p-3 border rounded-lg bg-gradient-to-r from-gray-50 to-white">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-1">
-                <div
-                  className={`p-2 rounded-lg ${color.replace('text', 'bg')} bg-opacity-10`}
-                >
-                  <FileText className={`h-5 w-5 ${color}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {file.name}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {(file.size / 1024).toFixed(2)} KB
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onRemove}
-                className="h-8 w-8 p-0 hover:bg-red-50 hover:text-red-600"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* 上传按钮 */}
-        <Button
-          onClick={onUpload}
-          disabled={!file || uploading}
-          className={`w-full h-12 text-base font-semibold text-white ${
-            type === 'entities'
-              ? 'bg-blue-600 hover:bg-blue-700'
-              : 'bg-green-600 hover:bg-green-700'
-          } disabled:bg-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg`}
-        >
-          {uploading ? (
-            <div className="flex items-center gap-2">
-              <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              <span>上传中...</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-black">
-              <Upload className="h-5 w-5" />
-              <span>确认上传</span>
-            </div>
-          )}
-        </Button>
       </div>
+
+      <p className="mb-3 text-sm text-gray-600">{description}</p>
+
+      <div
+        className={`border-2 border-dashed rounded-lg p-5 text-center transition-all duration-300 cursor-pointer
+          ${
+            isDragging
+              ? `${color.replace('text', 'border')} bg-${color.replace('text-', '').replace('-600', '-50')} bg-opacity-50`
+              : 'border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100'
+          }`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setIsDragging(true);
+        }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={onDrop}
+      >
+        <Upload className={`mx-auto h-8 w-8 ${color} mb-2`} />
+        <label className="cursor-pointer block">
+          <span className="text-sm font-medium text-gray-800">
+            拖拽文件到此处，或点击上传
+          </span>
+          <p className="text-xs text-gray-500 mt-1">仅支持 .json 格式文件</p>
+          <input
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={onFileChange}
+          />
+        </label>
+      </div>
+
+      {file && (
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-gray-200 p-2 bg-gray-50 transition-all duration-200">
+          <div className="flex items-center gap-2 flex-1">
+            <FileText className={`h-5 w-5 ${color} flex-shrink-0`} />
+            <span className="text-sm text-gray-800 truncate">{file.name}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onRemove}
+            className="h-8 w-8 p-0 rounded-full hover:bg-red-50 hover:text-red-600 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
 
-export const FileUpload = ({ onUploadSuccess }: FileUploadProps) => {
+/* ================= 主组件 ================= */
+export const FileUpload = () => {
   const { id: graphId } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
+
   const [entityFile, setEntityFile] = useState<File | null>(null);
   const [relationFile, setRelationFile] = useState<File | null>(null);
-  const [uploadingEntity, setUploadingEntity] = useState(false);
-  const [uploadingRelation, setUploadingRelation] = useState(false);
-  const [isDraggingEntity, setIsDraggingEntity] = useState(false);
-  const [isDraggingRelation, setIsDraggingRelation] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+
+  const [dragEntity, setDragEntity] = useState(false);
+  const [dragRelation, setDragRelation] = useState(false);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 实体文件处理
-  const handleEntityFileChange = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    if (!e.target.files || !e.target.files[0]) return;
-
-    const file = e.target.files[0];
-
-    if (!file.name.endsWith('.json')) {
-      showToast('只支持JSON格式文件', 'error');
-      e.target.value = '';
-      return;
-    }
-
+  /* ========== 文件选择 ========= */
+  const handleEntityChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     const { valid, error } = await validateEntityJson(file);
-    if (!valid) {
-      showToast(`格式错误: ${error}`, 'error');
-      e.target.value = '';
-      return;
-    }
-
+    if (!valid) return showToast(error!, 'error');
     setEntityFile(file);
     e.target.value = '';
   };
 
-  const handleEntityDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingEntity(false);
-
-    const file = e.dataTransfer.files[0];
+  const handleRelationChange = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
     if (!file) return;
-
-    if (!file.name.endsWith('.json')) {
-      showToast('只支持JSON格式文件', 'error');
-      return;
-    }
-
-    const { valid, error } = await validateEntityJson(file);
-    if (!valid) {
-      showToast(`格式错误: ${error}`, 'error');
-      return;
-    }
-
-    setEntityFile(file);
+    const { valid, error } = await validateRelationJson(file);
+    if (!valid) return showToast(error!, 'error');
+    setRelationFile(file);
+    e.target.value = '';
   };
-  const queryClient = useQueryClient();
-  const handleEntityUpload = async () => {
-    if (!entityFile || !graphId) return;
 
-    setUploadingEntity(true);
+  /* ========== 统一上传 ========= */
+  const handleUploadAll = async () => {
+    if (!entityFile || !relationFile || !graphId) return;
+    setUploading(true);
     const formData = new FormData();
     formData.append('files', entityFile);
-
-    try {
-      const response = await fetch(`/v1/graph/${graphId}/upload_files`, {
-        method: 'POST',
-        headers: {
-          Authorization: getAuthorization(),
-        },
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      if (response.ok && result.code === 0) {
-        showToast('实体文件上传成功', 'success');
-        setEntityFile(null);
-        queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeDetail'] });
-        onUploadSuccess?.();
-      } else {
-        showToast(result.message || '实体文件上传失败', 'error');
-      }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      showToast('实体文件上传失败', 'error');
-    } finally {
-      setUploadingEntity(false);
-    }
-  };
-
-  // 关系文件处理
-  const handleRelationFileChange = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    if (!e.target.files || !e.target.files[0]) return;
-
-    const file = e.target.files[0];
-
-    if (!file.name.endsWith('.json')) {
-      showToast('只支持JSON格式文件', 'error');
-      e.target.value = '';
-      return;
-    }
-
-    const { valid, error } = await validateRelationJson(file);
-    if (!valid) {
-      showToast(`格式错误: ${error}`, 'error');
-      e.target.value = '';
-      return;
-    }
-
-    setRelationFile(file);
-    e.target.value = '';
-  };
-
-  const handleRelationDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDraggingRelation(false);
-
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-
-    if (!file.name.endsWith('.json')) {
-      showToast('只支持JSON格式文件', 'error');
-      return;
-    }
-
-    const { valid, error } = await validateRelationJson(file);
-    if (!valid) {
-      showToast(`格式错误: ${error}`, 'error');
-      return;
-    }
-
-    setRelationFile(file);
-  };
-
-  const handleRelationUpload = async () => {
-    if (!relationFile || !graphId) return;
-
-    setUploadingRelation(true);
-    const formData = new FormData();
     formData.append('files', relationFile);
-
     try {
-      const response = await fetch(`/v1/graph/${graphId}/upload_files`, {
+      const res = await fetch(`/v1/graph/${graphId}/upload_files`, {
         method: 'POST',
-        headers: {
-          Authorization: getAuthorization(),
-        },
+        headers: { Authorization: getAuthorization() },
         body: formData,
       });
-
-      const result = await response.json();
-
-      if (response.ok && result.code === 0) {
-        showToast('关系文件上传成功', 'success');
+      const result = await res.json();
+      if (res.ok && result.code === 0) {
+        showToast('实体和关系上传成功', 'success');
+        setEntityFile(null);
         setRelationFile(null);
         queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeDetail'] });
-        onUploadSuccess?.();
       } else {
-        showToast(result.message || '关系文件上传失败', 'error');
+        showToast(result.message || '上传失败', 'error');
       }
-    } catch (error) {
-      console.error('Upload failed:', error);
-      showToast('关系文件上传失败', 'error');
+    } catch {
+      showToast('网络异常，上传失败', 'error');
     } finally {
-      setUploadingRelation(false);
+      setUploading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8 md:p-12">
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+      <div className="mx-auto max-w-7xl">
+        <h1 className="mb-10 text-center text-3xl md:text-4xl font-bold text-gray-800">
+          知识图谱数据上传
+        </h1>
 
-      <div className="max-w-7xl mx-auto">
-        {/* 页面标题 */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            知识图谱数据上传
-          </h1>
-          <p className="text-gray-600">
-            分别上传实体和关系数据文件，系统将自动验证格式
-          </p>
-        </div>
-
-        {/* 双栏布局 */}
-        <div className="flex gap-6">
-          {/* 左侧：实体上传 */}
+        <div className="flex gap-6 flex-col md:flex-row">
           <UploadCard
-            title="实体数据 (Entities)"
-            type="entities"
+            title="实体数据"
+            description="上传包含完整字段的实体 JSON 文件，字段缺失将导致上传失败"
             example={entitiesExample}
             file={entityFile}
-            onFileChange={handleEntityFileChange}
+            onFileChange={handleEntityChange}
             onRemove={() => setEntityFile(null)}
-            onUpload={handleEntityUpload}
-            uploading={uploadingEntity}
-            isDragging={isDraggingEntity}
-            onDragOver={(e) => {
+            onDrop={async (e) => {
               e.preventDefault();
-              setIsDraggingEntity(true);
+              setDragEntity(false);
+              const file = e.dataTransfer.files[0];
+              if (!file) return;
+              const { valid, error } = await validateEntityJson(file);
+              valid ? setEntityFile(file) : showToast(error!, 'error');
             }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              setIsDraggingEntity(false);
-            }}
-            onDrop={handleEntityDrop}
+            isDragging={dragEntity}
+            setIsDragging={setDragEntity}
             color="text-blue-600"
           />
 
-          {/* 右侧：关系上传 */}
           <UploadCard
-            title="关系数据 (Relations)"
-            type="relations"
+            title="关系数据"
+            description="上传包含头实体、尾实体和关系的 JSON 文件，字段缺失将导致上传失败"
             example={relationsExample}
             file={relationFile}
-            onFileChange={handleRelationFileChange}
+            onFileChange={handleRelationChange}
             onRemove={() => setRelationFile(null)}
-            onUpload={handleRelationUpload}
-            uploading={uploadingRelation}
-            isDragging={isDraggingRelation}
-            onDragOver={(e) => {
+            onDrop={async (e) => {
               e.preventDefault();
-              setIsDraggingRelation(true);
+              setDragRelation(false);
+              const file = e.dataTransfer.files[0];
+              if (!file) return;
+              const { valid, error } = await validateRelationJson(file);
+              valid ? setRelationFile(file) : showToast(error!, 'error');
             }}
-            onDragLeave={(e) => {
-              e.preventDefault();
-              setIsDraggingRelation(false);
-            }}
-            onDrop={handleRelationDrop}
+            isDragging={dragRelation}
+            setIsDragging={setDragRelation}
             color="text-green-600"
           />
+        </div>
+
+        <div className="mt-12 flex justify-center">
+          <Button
+            disabled={!entityFile || !relationFile || uploading}
+            onClick={handleUploadAll}
+            style={{
+              height: '5rem',
+              paddingLeft: '1.5rem',
+              paddingRight: '1.5rem',
+            }}
+            className="text-xl font-bold rounded-xl
+                      bg-blue-500 border-2 border-blue-700
+                      hover:bg-blue-600 hover:border-blue-800
+                      active:bg-blue-700 active:border-blue-900
+                      disabled:bg-gray-200 disabled:border-gray-300 disabled:cursor-not-allowed
+                      shadow-lg hover:shadow-xl active:shadow-md transition-all duration-300
+                      transform hover:translate-y-[-2px] active:translate-y-0 text-white"
+          >
+            {uploading ? (
+              <span className="flex items-center gap-2">
+                <span className="animate-spin h-6 w-6 border-2 border-white border-t-transparent rounded-full"></span>
+                上传中...
+              </span>
+            ) : (
+              '确认上传'
+            )}
+          </Button>
         </div>
       </div>
     </div>

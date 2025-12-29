@@ -50,7 +50,6 @@ export default function RetrievalTest({
   const [subgraphDepth, setSubgraphDepth] = useState(2);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<any>(null);
-  const [recallSubgraphCount, setRecallSubgraphCount] = useState(3);
   const handleTest = async () => {
     setLoading(true);
     try {
@@ -67,7 +66,6 @@ export default function RetrievalTest({
             question,
             similarity_threshold: similarityThreshold,
             subgraph_depth: subgraphDepth,
-            recall_subgraph_count: recallSubgraphCount,
             mode: 'text_match',
           }),
         },
@@ -133,7 +131,7 @@ export default function RetrievalTest({
               {/* 子图深度 */}
               <div>
                 <div className="flex items-center gap-2">
-                  <Label>子图深度</Label>
+                  <Label>挖掘深度</Label>
                   <Tip content="控制关联实体跳转的深度，深度越大检索范围越广但可能包含更多无关信息" />
                 </div>
                 <div className="flex items-center gap-4 mt-2">
@@ -153,36 +151,6 @@ export default function RetrievalTest({
                     }
                     className="w-16 h-8 text-center"
                     max={5}
-                    min={1}
-                    step={1}
-                  />
-                </div>
-              </div>
-              {/* 召回子图数量 */}
-              <div>
-                <div className="flex items-center gap-2">
-                  <Label>召回子图数量</Label>
-                  <Tip content="控制最多返回的子图数量。数量越大，覆盖的关联路径越多，但计算开销和噪声也会增加" />
-                </div>
-                <div className="flex items-center gap-4 mt-2">
-                  <SingleFormSlider
-                    value={recallSubgraphCount}
-                    onChange={setRecallSubgraphCount}
-                    max={10}
-                    min={1}
-                    step={1}
-                    className="flex-1"
-                  />
-                  <Input
-                    type="number"
-                    value={recallSubgraphCount}
-                    onChange={(e) =>
-                      setRecallSubgraphCount(
-                        parseInt(e.target.value || '1', 10),
-                      )
-                    }
-                    className="w-16 h-8 text-center"
-                    max={10}
                     min={1}
                     step={1}
                   />
@@ -241,7 +209,9 @@ export default function RetrievalTest({
                         key={index}
                         className="flex justify-between items-center p-2 bg-gray-50 rounded"
                       >
-                        <span className="font-medium">{entity.name}</span>
+                        <span className="font-medium">
+                          {entity.entity_name}
+                        </span>
                         <span className="text-sm text-text-sub-title">
                           相似度: {(entity.similarity * 100).toFixed(2)}%
                         </span>
@@ -263,21 +233,10 @@ export default function RetrievalTest({
                         <span className="mx-2 text-text-sub-title">→</span>
                         <span className="font-medium">{rel.target}</span>
                         <span className="ml-2 text-sm text-text-sub-title">
-                          ({rel.type})
+                          ({rel.description})
                         </span>
                       </div>
                     ))}
-                  </div>
-                </FormContainer>
-              )}
-
-              {results.subgraph && (
-                <FormContainer className="px-5 py-2.5">
-                  <h3 className="font-semibold mb-3 text-text-primary">
-                    子图结构
-                  </h3>
-                  <div className="bg-gray-50 p-4 rounded text-sm">
-                    <pre>{JSON.stringify(results.subgraph, null, 2)}</pre>
                   </div>
                 </FormContainer>
               )}

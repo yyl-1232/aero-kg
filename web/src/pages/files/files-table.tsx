@@ -106,13 +106,21 @@ export function FilesTable({
           aria-label="Select all"
         />
       ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-        />
-      ),
+      cell: ({ row }) => {
+        const file = row.original;
+        const isKnowledgeGraphFile = file.source_type === 'knowledgegraph';
+
+        return (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) =>
+              !isKnowledgeGraphFile && row.toggleSelected(!!value)
+            }
+            aria-label="Select row"
+            disabled={isKnowledgeGraphFile}
+          />
+        );
+      },
       enableSorting: false,
       enableHiding: false,
     },

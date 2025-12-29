@@ -2,6 +2,7 @@ import { useSelectedIds } from '@/hooks/logic-hooks/use-row-selection';
 import { IFile } from '@/interfaces/database/file-manager';
 import { OnChangeFn, RowSelectionState } from '@tanstack/react-table';
 import { FolderInput, Trash2 } from 'lucide-react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHandleDeleteFile } from './use-delete-file';
 import { UseMoveDocumentShowType } from './use-move-file';
@@ -21,16 +22,25 @@ export function useBulkOperateFile({
   const { selectedIds } = useSelectedIds(rowSelection, files);
 
   const { handleRemoveFile } = useHandleDeleteFile();
-
+  const hasKnowledgeGraphFiles = useMemo(() => {
+    return selectedIds.some((id) => {
+      const file = files.find((f) => f.id === id);
+      return file?.source_type === 'knowledgegraph';
+    });
+  }, [selectedIds, files]);
   const list = [
-    {
-      id: 'move',
-      label: t('common.move'),
-      icon: <FolderInput />,
-      onClick: () => {
-        showMoveFileModal(selectedIds, true);
-      },
-    },
+    ...(hasKnowledgeGraphFiles
+      ? []
+      : [
+          {
+            id: 'move',
+            label: t('common.move'),
+            icon: <FolderInput />,
+            onClick: () => {
+              showMoveFileModal(selectedIds, true);
+            },
+          },
+        ]),
     {
       id: 'delete',
       label: t('common.delete'),

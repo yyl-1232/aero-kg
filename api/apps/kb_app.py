@@ -591,7 +591,6 @@ def knowledge_graph_retrieval_test(kb_id):
     question = req["question"]
     similarity_threshold = float(req.get("similarity_threshold", 0.3))
     subgraph_depth = int(req.get("subgraph_depth", 2))
-    recallSubgraphCount = int(req.get("recallSubgraphCount", 3))
     mode = req.get("mode", "text_match")
 
     print("========== knowledge_graph_retrieval_test START ==========")
@@ -629,10 +628,6 @@ def knowledge_graph_retrieval_test(kb_id):
         idxnms = [index_name(tid) for tid in tenant_ids]
         print("Index names:", idxnms)
 
-        # 使用jieba对问题分词
-        question_tokens = list(jieba.cut_for_search(question))
-        print("Question tokens:", question_tokens)
-
         # 获取知识图谱数据
         graph_response = knowledge_graph(kb_id)
         if graph_response.status_code != 200:
@@ -650,33 +645,44 @@ def knowledge_graph_retrieval_test(kb_id):
         entity_similarity_map = {}
 
         for node in nodes:
-            entity_name = node.get('entity_name', '').lower()
-            entity_desc = node.get('description', '').lower()
+            entity_name = node.get('entity_name', '')
+            entity_desc = node.get('description', '')
 
-            # 计算与每个token的相似度
-            max_similarity = 0.0
-            for token in question_tokens:
-                token_lower = token.lower()
+            # 首先检查精确匹配
+            if question.lower().strip() == entity_name.lower().strip():
+                max_similarity = 1.0  # 100%相似度
+            else:
+                # 使用jieba对问题分词
+                question_tokens = list(jieba.cut_for_search(question))
+                print("Question tokens:", question_tokens)
 
-                # 简单的字符串包含相似度计算
-                if token_lower in entity_name:
-                    similarity = len(token_lower) / len(entity_name) if entity_name else 0
-                elif token_lower in entity_desc:
-                    similarity = len(token_lower) / len(entity_desc) if entity_desc else 0
-                else:
-                    # 使用编辑距离计算相似度
-                    similarity = 1 - (edit_distance(token_lower, entity_name) / max(len(token_lower),
-                                                                                    len(entity_name))) if entity_name else 0
+                entity_name_lower = entity_name.lower()
+                entity_desc_lower = entity_desc.lower()
 
-                max_similarity = max(max_similarity, similarity)
+                # 计算与每个token的相似度
+                max_similarity = 0.0
+                for token in question_tokens:
+                    token_lower = token.lower()
+
+                    # 简单的字符串包含相似度计算
+                    if token_lower in entity_name_lower:
+                        similarity = len(token_lower) / len(entity_name_lower) if entity_name_lower else 0
+                    elif token_lower in entity_desc_lower:
+                        similarity = len(token_lower) / len(entity_desc_lower) if entity_desc_lower else 0
+                    else:
+                        # 使用编辑距离计算相似度
+                        similarity = 1 - (edit_distance(token_lower, entity_name_lower) / max(len(token_lower),
+                                                                                              len(entity_name_lower))) if entity_name_lower else 0
+
+                    max_similarity = max(max_similarity, similarity)
 
             if max_similarity >= similarity_threshold:
                 matched_entities.append({
                     'id': node.get('id'),
-                    'entity_name': node.get('entity_name'),
+                    'entity_name': entity_name,
                     'entity_type': node.get('entity_type'),
                     'similarity': max_similarity,
-                    'description': node.get('description')
+                    'description': entity_desc
                 })
                 entity_similarity_map[node.get('id')] = max_similarity
 
@@ -684,7 +690,15 @@ def knowledge_graph_retrieval_test(kb_id):
         matched_entities.sort(key=lambda x: x['similarity'], reverse=True)
         print(f"Matched entities: {len(matched_entities)}")
 
-        # 获取相关关系
+        # 创建实体ID到名称的映射表
+        entity_id_to_name = {}
+        for node in nodes:
+            entity_id = node.get('id')
+            entity_name = node.get('entity_name')
+            if entity_id and entity_name:
+                entity_id_to_name[entity_id] = entity_name
+
+                # 获取相关关系
         matched_entity_ids = {entity['id'] for entity in matched_entities}
         matched_relationships = []
 
@@ -693,44 +707,23 @@ def knowledge_graph_retrieval_test(kb_id):
             target_id = edge.get('target')
 
             if source_id in matched_entity_ids or target_id in matched_entity_ids:
+                # 获取实体名称，如果找不到则使用ID
+                source_name = entity_id_to_name.get(source_id, str(source_id))
+                target_name = entity_id_to_name.get(target_id, str(target_id))
+
                 matched_relationships.append({
-                    'source': source_id,
-                    'target': target_id,
+                    'source': source_name,  # 使用实体名称而不是ID
+                    'target': target_name,  # 使用实体名称而不是ID
+                    'source_id': source_id,  # 保留原始ID
+                    'target_id': target_id,  # 保留原始ID
                     'description': edge.get('description'),
                     'weight': edge.get('weight', 0)
                 })
-
-                # 获取子图数据
-        subgraph_data = {}
-        if matched_entities:
-            # 构建子图请求
-            subgraph_request = {
-                'entities': [entity['id'] for entity in matched_entities[:recallSubgraphCount]],  # 限制数量避免过大
-                'depth': subgraph_depth
-            }
-
-            # 调用子图接口（这里假设存在该接口）
-            try:
-                subgraph_response = requests.post(
-                    f"/{kb_id}/knowledge_graph/subgraph",
-                    json=subgraph_request,
-                    headers={'Authorization': request.headers.get('Authorization')}
-                )
-                if subgraph_response.status_code == 200:
-                    subgraph_data = subgraph_response.json().get('data', {})
-            except Exception as e:
-                print(f"Failed to get subgraph: {e}")
-                # 如果子图接口不存在，手动构建简单子图
-                subgraph_data = {
-                    'nodes': [node for node in nodes if node.get('id') in matched_entity_ids],
-                    'edges': matched_relationships
-                }
 
                 # 构建返回结果
         response_data = {
             "entities": matched_entities,
             "relationships": matched_relationships,
-            "subgraph": subgraph_data,
             "description": f"基于问题'{question}'找到{len(matched_entities)}个相关实体，{len(matched_relationships)}个相关关系"
         }
 

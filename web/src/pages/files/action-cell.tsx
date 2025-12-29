@@ -92,16 +92,16 @@ export function ActionCell({
           <FolderInput />
         </Button>
       )}
-
-      <Button
-        variant="transparent"
-        className="border-none hover:bg-bg-card text-text-primary"
-        size={'sm'}
-        onClick={handleShowFileRenameModal}
-      >
-        <FolderPen />
-      </Button>
-
+      {record.source_type !== 'knowledgegraph' && (
+        <Button
+          variant="transparent"
+          className="border-none hover:bg-bg-card text-text-primary"
+          size={'sm'}
+          onClick={handleShowFileRenameModal}
+        >
+          <FolderPen />
+        </Button>
+      )}
       {isFolder || (
         <Button
           variant="transparent"
@@ -152,15 +152,17 @@ export function ActionCell({
           )}
         </DropdownMenuContent>
       </DropdownMenu> */}
-      <ConfirmDeleteDialog onOk={handleDelete}>
-        <Button
-          variant="transparent"
-          className="border-none hover:bg-bg-card text-text-primary"
-          size={'sm'}
-        >
-          <Trash2 />
-        </Button>
-      </ConfirmDeleteDialog>
+      {record.source_type !== 'knowledgegraph' && (
+        <ConfirmDeleteDialog onOk={handleDelete}>
+          <Button
+            variant="transparent"
+            className="border-none hover:bg-bg-card text-text-primary"
+            size={'sm'}
+          >
+            <Trash2 />
+          </Button>
+        </ConfirmDeleteDialog>
+      )}
     </section>
   );
 }
