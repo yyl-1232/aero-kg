@@ -13,12 +13,10 @@ import { getAuthorization } from '@/utils/authorization-util';
 import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-
 interface GraphDisplayProps {
   kbId: string;
   kbData: any;
 }
-
 interface Node {
   id: number;
   entity_name: string;
@@ -53,6 +51,56 @@ const EMPTY_GRAPH: GraphData = { nodes: [], edges: [] };
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
+}
+
+// ✅ 新增：绘制曲线箭头的函数
+function drawCurvedArrow(
+  ctx: CanvasRenderingContext2D,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  curvature: number = 0.15,
+  arrowSize: number = 8,
+) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  if (dist < 1) return;
+
+  // 计算控制点（贝塞尔曲线）
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+
+  // 垂直于连线方向的偏移
+  const offsetX = -dy * curvature;
+  const offsetY = dx * curvature;
+
+  const controlX = midX + offsetX;
+  const controlY = midY + offsetY;
+
+  // 绘制曲线
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.quadraticCurveTo(controlX, controlY, x2, y2);
+  ctx.stroke();
+
+  // 在终点绘制箭头
+  const angle = Math.atan2(y2 - controlY, x2 - controlX);
+
+  ctx.save();
+  ctx.translate(x2, y2);
+  ctx.rotate(angle);
+
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(-arrowSize, -arrowSize / 2);
+  ctx.lineTo(-arrowSize, arrowSize / 2);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
 }
 
 function InteractiveForceGraph({
@@ -140,7 +188,7 @@ function InteractiveForceGraph({
     setNodePositions(positions);
   }, [data.nodes, canvasSize.width, canvasSize.height]);
 
-  // 力导向布局（参数自适应 + 碰撞分离 + 软圆边界）
+  // ✅ 优化的力导向布局：让有连接的节点更靠近
   useEffect(() => {
     if (nodePositions.size === 0) return;
     const canvas = canvasRef.current;
@@ -152,23 +200,24 @@ function InteractiveForceGraph({
     const area = width * height;
     const baseSpacing = Math.sqrt(area / n);
 
-    const LINK_DISTANCE = clamp(baseSpacing * 1.45, 80, 260);
+    // ✅ 关键参数调整：让连接的节点距离更近
+    const LINK_DISTANCE = clamp(baseSpacing * 1.2, 60, 180);
     const repulsionForce = clamp(
-      LINK_DISTANCE * LINK_DISTANCE * 0.06,
-      60,
-      1400,
+      LINK_DISTANCE * LINK_DISTANCE * 0.08,
+      80,
+      1600,
     );
-    const springK = clamp(0.012 + (120 / LINK_DISTANCE) * 0.006, 0.012, 0.03);
-    const centerForce = clamp(0.02 + (n / 1500) * 0.03, 0.02, 0.06);
-    const damping = 0.86;
+    const springK = clamp(0.02 + (100 / LINK_DISTANCE) * 0.01, 0.02, 0.05);
+    const centerForce = clamp(0.015 + (n / 1500) * 0.025, 0.015, 0.05);
+    const damping = 0.88;
 
     const cx = width / 2;
     const cy = height / 2;
     const MAX_R = Math.min(width, height) / 2 - PADDING;
     const BOUND_FORCE = 0.03;
 
-    const minDist = clamp(LINK_DISTANCE * 0.62, NODE_BASE_RADIUS * 2 + 10, 130);
-    const pushApart = clamp(0.35 + (120 / LINK_DISTANCE) * 0.15, 0.35, 0.65);
+    const minDist = clamp(LINK_DISTANCE * 0.7, NODE_BASE_RADIUS * 2 + 15, 150);
+    const pushApart = clamp(0.4 + (100 / LINK_DISTANCE) * 0.18, 0.4, 0.7);
 
     const simulate = () => {
       const newPositions = new Map(nodePositions);
@@ -198,7 +247,7 @@ function InteractiveForceGraph({
         p1.vy += (cy - p1.y) * centerForce;
       });
 
-      // 2) 边的弹簧力：围绕 LINK_DISTANCE
+      // ✅ 2) 边的弹簧力：让有连接的节点相互靠近的关键！
       data.links.forEach((link) => {
         const p1 = newPositions.get(link.source);
         const p2 = newPositions.get(link.target);
@@ -284,7 +333,8 @@ function InteractiveForceGraph({
       });
 
       setNodePositions(newPositions);
-      if (maxMove > 0.1) animationRef.current = requestAnimationFrame(simulate);
+      if (maxMove > 0.08)
+        animationRef.current = requestAnimationFrame(simulate);
     };
 
     animationRef.current = requestAnimationFrame(simulate);
@@ -300,7 +350,7 @@ function InteractiveForceGraph({
     canvasSize.height,
   ]);
 
-  // 绘制
+  // ✅ 绘制：使用曲线箭头替代直线
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -312,7 +362,7 @@ function InteractiveForceGraph({
     ctx.save();
     ctx.font = '12px sans-serif';
 
-    // 边
+    // ✅ 边（曲线箭头）
     data.links.forEach((link) => {
       const s = nodePositions.get(link.source);
       const t = nodePositions.get(link.target);
@@ -326,11 +376,27 @@ function InteractiveForceGraph({
         : isHovered
           ? '#60a5fa'
           : '#cbd5e1';
+      ctx.fillStyle = ctx.strokeStyle;
       ctx.lineWidth = isSelected ? 3 : isHovered ? 2 : 1.5;
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(t.x, t.y);
-      ctx.stroke();
+
+      // 计算目标节点半径，让箭头停在节点边缘
+      const targetRadius =
+        selectedNode?.id === link.target
+          ? NODE_SELECTED_RADIUS
+          : hoveredNode === link.target
+            ? NODE_HOVER_RADIUS
+            : NODE_BASE_RADIUS;
+
+      const dx = t.x - s.x;
+      const dy = t.y - s.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const ratio = (dist - targetRadius - 2) / dist;
+
+      const endX = s.x + dx * ratio;
+      const endY = s.y + dy * ratio;
+
+      // 绘制曲线箭头
+      drawCurvedArrow(ctx, s.x, s.y, endX, endY, 0.15);
     });
 
     // 节点
@@ -352,6 +418,7 @@ function InteractiveForceGraph({
         location: '#10b981',
         concept: '#f59e0b',
         event: '#8b5cf6',
+        entity: '#3b82f6', // 添加ENTITY类型的颜色
       };
 
       ctx.beginPath();
@@ -424,7 +491,7 @@ function InteractiveForceGraph({
       const px = s.x + dot * dx;
       const py = s.y + dot * dy;
 
-      if (Math.sqrt((x - px) ** 2 + (y - py) ** 2) <= 6) return edge;
+      if (Math.sqrt((x - px) ** 2 + (y - py) ** 2) <= 8) return edge;
     }
     return null;
   };
@@ -508,7 +575,7 @@ function InteractiveForceGraph({
   );
 }
 
-// 详情面板：使用映射显示连接的实体名称；并隐藏不需要的字段（条件渲染）
+// 详情面板
 function DetailPanel({
   node,
   edge,
@@ -520,7 +587,6 @@ function DetailPanel({
   nodeNameById: Map<number, string>;
   onClose: () => void;
 }) {
-  // 节点区：ENTITY 不展示；pagerank=1 不展示
   const showType =
     !!node?.entity_type &&
     node.entity_type !== 'ENTITY' &&
@@ -530,7 +596,6 @@ function DetailPanel({
   const showPageRank =
     typeof node?.pagerank === 'number' && Math.abs(node.pagerank - 1) > 1e-9;
 
-  // 关系区：描述=relation 不展示；weight=2 不展示
   const showEdgeDescription =
     !!edge?.description &&
     !!edge?.relation &&
@@ -628,37 +693,51 @@ function DetailPanel({
   );
 }
 
-// 主组件
+// ✅ 演示组件：模拟你的数据结构
 export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
+  const queryClient = useQueryClient();
+
   const [graphData, setGraphData] = useState<GraphData>(EMPTY_GRAPH);
   const [originalGraphData, setOriginalGraphData] =
-    useState<GraphData>(EMPTY_GRAPH); // 新增：保存原始图谱数据
+    useState<GraphData>(EMPTY_GRAPH);
+
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
+
   const [searchEntity, setSearchEntity] = useState('');
   const [searchDepth, setSearchDepth] = useState('2');
   const [isSearching, setIsSearching] = useState(false);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const { data: knowledgeGraph, loading: graphLoading } =
     useFetchKnowledgeGraph();
-  const queryClient = useQueryClient();
 
+  /**
+   * ✅ 使用真实接口数据初始化图谱
+   */
   useEffect(() => {
     const graph = knowledgeGraph?.graph;
+
     if (graph && Array.isArray(graph.nodes) && Array.isArray(graph.edges)) {
       setGraphData(graph);
-      setOriginalGraphData(graph); // 保存原始图谱数据
+
+      // 只在首次加载真实图谱时保存一份原始数据
+      setOriginalGraphData((prev) => (prev.nodes.length === 0 ? graph : prev));
     }
   }, [knowledgeGraph]);
 
-  // ✅ 在父组件缓存“id -> name”映射
+  /**
+   * id → entity_name 映射
+   */
   const nodeNameById = useMemo(() => {
     return new Map<number, string>(
       graphData.nodes.map((n) => [n.id, n.entity_name]),
     );
   }, [graphData.nodes]);
 
+  /**
+   * 🔍 查询子图
+   */
   const handleSearchSubgraph = async () => {
     const keyword = searchEntity.trim();
     if (!keyword || !kbId) return;
@@ -667,7 +746,8 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
     setIsSearching(true);
 
     try {
-      const depthNum = Math.min(3, Math.max(1, Number(searchDepth) || 2));
+      const depthNum = Math.min(3, Math.max(1, Number(searchDepth)));
+
       const res = await fetch(`/v1/kb/${kbId}/knowledge_graph/subgraph`, {
         method: 'POST',
         headers: {
@@ -681,8 +761,10 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
       });
 
       const result = await res.json();
+
       if (result.code === 0 && result.data?.subgraph) {
         const sub = result.data.subgraph as GraphData;
+
         if (sub.nodes?.length) {
           setGraphData(sub);
           setSelectedNode(null);
@@ -700,20 +782,32 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
       setIsSearching(false);
     }
   };
+
+  /**
+   * 🔄 重置视图（回到完整真实图谱）
+   */
   const handleResetView = () => {
     setSearchEntity('');
     setSelectedNode(null);
     setSelectedEdge(null);
-    setGraphData(originalGraphData); // 使用保存的原始图谱数据
-    queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeGraph'] });
+    setGraphData(originalGraphData);
+    queryClient.invalidateQueries({
+      queryKey: ['fetchKnowledgeGraph'],
+    });
   };
+
+  /**
+   * 🔁 刷新真实图谱
+   */
+  const handleRefreshGraph = () =>
+    queryClient.invalidateQueries({
+      queryKey: ['fetchKnowledgeGraph'],
+    });
+
   const hasGraph = useMemo(
     () => graphData.nodes.length > 0 || graphData.edges.length > 0,
     [graphData],
   );
-
-  const handleRefreshGraph = () =>
-    queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeGraph'] });
 
   if (graphLoading) {
     return (
@@ -742,6 +836,7 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
             placeholder="输入实体名称，例如：高超声速飞行器"
             className="w-64"
           />
+
           <Select value={searchDepth} onValueChange={setSearchDepth}>
             <SelectTrigger className="w-24">
               <SelectValue placeholder="层数" />
@@ -752,15 +847,18 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
               <SelectItem value="3">3 层</SelectItem>
             </SelectContent>
           </Select>
+
           <Button
             onClick={handleSearchSubgraph}
             disabled={isSearching || !searchEntity.trim()}
           >
             {isSearching ? '查询中...' : '查询子图'}
           </Button>
+
           <Button variant="outline" onClick={handleResetView}>
             重置视图
           </Button>
+
           <Button variant="outline" onClick={handleRefreshGraph}>
             刷新图谱
           </Button>
@@ -775,7 +873,10 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
           <>
             <div className="w-full h-[560px]">
               <InteractiveForceGraph
-                data={{ nodes: graphData.nodes, links: graphData.edges }}
+                data={{
+                  nodes: graphData.nodes,
+                  links: graphData.edges,
+                }}
                 selectedNode={selectedNode}
                 selectedEdge={selectedEdge}
                 onNodeSelect={setSelectedNode}

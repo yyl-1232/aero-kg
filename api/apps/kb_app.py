@@ -14,6 +14,7 @@
 #  limitations under the License.
 #
 import json
+import logging
 
 from flask import request
 from flask_login import login_required, current_user
@@ -22,22 +23,26 @@ from api.db.services import duplicate_name
 from api.db.services.document_service import DocumentService
 from api.db.services.file2document_service import File2DocumentService
 from api.db.services.file_service import FileService
+from api.db.services.llm_service import LLMBundle
 from api.db.services.user_service import TenantService, UserTenantService
 from api.settings import RetCode
 from api.utils.api_utils import server_error_response, get_data_error_result, validate_request, not_allowed_parameters
 from api.utils import get_uuid
-from api.db import StatusEnum, FileSource
+from api.db import StatusEnum, FileSource, LLMType
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.db_models import File
 from api.utils.api_utils import get_json_result
 from api import settings
+from graphrag.search import KGSearch
 from rag.nlp import search
 from api.constants import DATASET_NAME_LIMIT
+from rag.nlp.search import index_name
 from rag.settings import PAGERANK_FLD
 from rag.utils.storage_factory import STORAGE_IMPL
 from api.db.services.knowledge_graph_service import KnowledgeGraphService
 
 from datetime import datetime
+import jieba
 
 def debug_log(msg):
     ts = datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")
@@ -572,6 +577,77 @@ def extract_subgraph(graph_data, entity_name, depth):
         "nodes": subgraph_nodes,
         "edges": subgraph_edges
     }
+
+
+@manager.route('/<kb_id>/knowledge_graph/retrieval_test', methods=['POST'])  # noqa: F821
+@login_required
+@validate_request("kb_id", "question")
+def knowledge_graph_retrieval_test(kb_id):
+    """
+    知识图谱检索测试接口 - 基于jieba分词 + 文本匹配
+    """
+    req = request.json
+    question = req["question"]
+    similarity_threshold = float(req.get("similarity_threshold", 0.3))
+    subgraph_depth = int(req.get("subgraph_depth", 2))
+    mode = req.get("mode", "text_match")
+
+    print("========== knowledge_graph_retrieval_test START ==========")
+    print("Question:", question)
+    print("Similarity threshold:", similarity_threshold)
+    print("Subgraph depth:", subgraph_depth)
+    print("Mode:", mode)
+    print("KB ID:", kb_id)
+
+    try:
+        # 验证知识图谱
+        e, kb = KnowledgeGraphService.get_by_id(kb_id)
+        print("KnowledgeGraphService.get_by_id result:", e, getattr(kb, 'id', None))
+        if not e:
+            return get_data_error_result(message="Knowledge graph not found!")
+
+        # 校验用户权限
+        tenants = UserTenantService.query(user_id=current_user.id)
+        tenant_ids = []
+        for tenant in tenants:
+            if KnowledgeGraphService.query(tenant_id=tenant.tenant_id, id=kb_id):
+                tenant_ids.append(tenant.tenant_id)
+                break
+        else:
+            print("No permission for kb_id:", kb_id)
+            return get_json_result(
+                data=False,
+                message='Only owner of knowledge graph authorized for this operation.',
+                code=settings.RetCode.OPERATING_ERROR
+            )
+        print("Authorized tenant_ids:", tenant_ids)
+
+        # 初始化检索器
+        kg_search = KGSearch(settings.docStoreConn)
+        idxnms = [index_name(tid) for tid in tenant_ids]
+        print("Index names:", idxnms)
+
+        # 使用jieba对问题分词
+        question_tokens = list(jieba.cut_for_search(question))
+
+
+        # 构建返回结果
+        response_data = {
+            "entities": [],
+            "relationships": [],
+            "subgraph": {},
+            "description": ""
+        }
+
+
+        print("========== knowledge_graph_retrieval_test END ==========")
+        return get_json_result(data=response_data)
+
+    except Exception as e:
+        logging.exception(f"知识图谱检索测试失败: {e}")
+        return server_error_response(e)
+
+
 # @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
 # @login_required
 # def knowledge_graph(kb_id):

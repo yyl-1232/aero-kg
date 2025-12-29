@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'umi';
 import { FileUpload } from './components/file-upload';
 import GraphDisplay from './components/graph-display';
+import RetrievalTest from './components/retrieval-test';
 type TabType = 'graph-display' | 'retrieval-test' | 'file-upload';
 const KnowledgeGraphDetail = () => {
   const { id } = useParams();
@@ -177,12 +178,7 @@ const KnowledgeGraphDetail = () => {
           {activeTab === 'retrieval-test' && (
             <div className="h-full">
               <h2 className="text-xl font-semibold mb-4">检索测试</h2>
-              <div className="bg-white rounded-lg border p-4 h-[calc(100%-3rem)]">
-                {/* 这里放置检索测试组件 */}
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  检索测试区域 (待实现)
-                </div>
-              </div>
+              <RetrievalTest knowledgeGraphId={id || ''} />
             </div>
           )}
 
