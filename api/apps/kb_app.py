@@ -476,6 +476,102 @@ def get_file_content(file_id):
         return None
 
 
+@manager.route('/<kb_id>/knowledge_graph/subgraph', methods=['POST'])  # noqa: F821
+@login_required
+def get_subgraph(kb_id):
+    """获取指定实体的子图"""
+    print(f"=== DEBUG: Subgraph Access for KB ID {kb_id} ===")
+    data = request.get_json()
+    entity_name = data.get('entity_name')
+    depth = data.get('depth', 2)
+
+    if not entity_name:
+        return get_json_result(
+            code=RetCode.OPERATING_ERROR,
+            message='entity_name is required'
+        )
+
+        # 权限验证（复用现有逻辑）
+    tenants = UserTenantService.query(user_id=current_user.id)
+    kb_found = None
+    for tenant in tenants:
+        kb_found = KnowledgeGraphService.query(
+            tenant_id=tenant.tenant_id,
+            id=kb_id,
+            status="1"
+        )
+        if kb_found:
+            break
+
+    if not kb_found:
+        return get_json_result(data={"subgraph": {"nodes": [], "edges": []}})
+
+    kb = kb_found[0]
+
+    # 获取完整图谱数据
+    graph_data = get_graph_data_from_files(kb)
+
+    # 查找子图
+    subgraph = extract_subgraph(graph_data, entity_name, depth)
+    print("subgraph",subgraph)
+    return get_json_result(data={"subgraph": subgraph})
+
+
+def extract_subgraph(graph_data, entity_name, depth):
+    """从完整图谱中提取指定实体的子图"""
+    nodes = graph_data.get('nodes', [])
+    edges = graph_data.get('edges', [])
+
+    # 查找起始实体
+    start_node = None
+    for node in nodes:
+        if node.get('entity_name') == entity_name:
+            start_node = node
+            break
+
+    if not start_node:
+        return {"nodes": [], "edges": []}
+
+        # 使用BFS构建子图
+    from collections import deque
+
+    visited_nodes = set()
+    visited_edges = set()
+    queue = deque([(start_node['id'], 0)])
+
+    while queue:
+        current_node_id, current_depth = queue.popleft()
+
+        if current_depth > depth:
+            continue
+
+        visited_nodes.add(current_node_id)
+
+        # 查找相邻节点和边
+        for edge in edges:
+            source_id = edge.get('source')
+            target_id = edge.get('target')
+
+            if source_id == current_node_id and target_id not in visited_nodes:
+                if current_depth < depth:
+                    queue.append((target_id, current_depth + 1))
+                visited_edges.add((source_id, target_id))
+            elif target_id == current_node_id and source_id not in visited_nodes:
+                if current_depth < depth:
+                    queue.append((source_id, current_depth + 1))
+                visited_edges.add((source_id, target_id))
+
+                # 构建子图数据
+    subgraph_nodes = [node for node in nodes if node['id'] in visited_nodes]
+    subgraph_edges = [
+        edge for edge in edges
+        if (edge.get('source'), edge.get('target')) in visited_edges
+    ]
+
+    return {
+        "nodes": subgraph_nodes,
+        "edges": subgraph_edges
+    }
 # @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
 # @login_required
 # def knowledge_graph(kb_id):

@@ -54,6 +54,8 @@ export default {
   get_kb_graph_detail: `${api_host}/kb/graph/detail`,
   getKnowledgeGraph: (knowledgeId: string) =>
     `${api_host}/kb/${knowledgeId}/knowledge_graph`,
+  getKnowledgeGraph_subgraph: (knowledgeId: string) =>
+    `${api_host}/kb/${knowledgeId}/knowledge_graph/subgraph`,
   getMeta: `${api_host}/kb/get_meta`,
   graph_upload_files: (graphId: string) =>
     `${api_host}/graph/${graphId}/upload_files`,

@@ -663,14 +663,13 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
 
     try {
       const depthNum = Math.min(3, Math.max(1, Number(searchDepth) || 2));
-      const res = await fetch('/api/v1/knowledge_graph/subgraph', {
+      const res = await fetch(`/api/v1/kb/${kbId}/knowledge_graph/subgraph`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
         },
         body: JSON.stringify({
-          graph_id: kbId,
           entity_name: keyword,
           depth: depthNum,
         }),
