@@ -23,7 +23,7 @@ import { useEffect, useState } from 'react'; // 添加 useEffect
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'umi';
 import { FileUpload } from './components/file-upload';
-
+import GraphDisplay from './components/graph-display';
 type TabType = 'graph-display' | 'retrieval-test' | 'file-upload';
 const KnowledgeGraphDetail = () => {
   const { id } = useParams();
@@ -171,15 +171,7 @@ const KnowledgeGraphDetail = () => {
         {/* 右侧内容区域 */}
         <main className="flex-1 p-6">
           {activeTab === 'graph-display' && (
-            <div className="h-full">
-              <h2 className="text-xl font-semibold mb-4">知识图谱展示</h2>
-              <div className="bg-white rounded-lg border p-4 h-[calc(100%-3rem)]">
-                {/* 这里放置知识图谱可视化组件 */}
-                <div className="flex items-center justify-center h-full text-gray-500">
-                  知识图谱可视化区域 (待实现)
-                </div>
-              </div>
-            </div>
+            <GraphDisplay kbId={id || ''} kbData={kbData} />
           )}
 
           {activeTab === 'retrieval-test' && (

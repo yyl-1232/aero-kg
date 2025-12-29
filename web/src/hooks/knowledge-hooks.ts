@@ -460,7 +460,7 @@ export function useFetchKnowledgeGraph() {
 
   const { data, isFetching: loading } = useQuery<IKnowledgeGraph>({
     queryKey: ['fetchKnowledgeGraph', knowledgeBaseId],
-    initialData: { graph: {}, mind_map: {} } as IKnowledgeGraph,
+    // initialData: { graph: {}, mind_map: {} } as IKnowledgeGraph,
     enabled: !!knowledgeBaseId,
     gcTime: 5 * 60 * 1000, // 缓存5分钟
     staleTime: 60 * 1000, // 1分钟内认为数据是新鲜的

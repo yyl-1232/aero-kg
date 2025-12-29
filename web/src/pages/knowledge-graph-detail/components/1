@@ -1,0 +1,265 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { useFetchKnowledgeGraph } from '@/hooks/knowledge-hooks'; // 使用自定义 hook 获取图谱数据
+import { useQueryClient } from '@tanstack/react-query';
+
+interface GraphDisplayProps {
+  kbId: string;
+  kbData: any;
+}
+
+interface Node {
+  id: number;
+  entity_name: string;
+  entity_type: string;
+  description: string;
+  pagerank: number;
+  communities: any[];
+  source: string[];
+}
+
+interface Edge {
+  source: number;
+  target: number;
+  relation: string;
+  description: string;
+  weight: number;
+}
+
+interface GraphData {
+  nodes: Node[];
+  edges: Edge[];
+}
+
+const EMPTY_GRAPH: GraphData = { nodes: [], edges: [] };
+
+function SimpleForceGraph({ data }: { data: { nodes: Node[], links: Edge[] } }) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+
+    const nodePositions = new Map<number, { x: number; y: number }>();
+
+    data.nodes.forEach((node, i) => {
+      const angle = (i / data.nodes.length) * Math.PI * 2;
+      const radius = Math.min(width, height) * 0.3;
+      nodePositions.set(node.id, {
+        x: width / 2 + Math.cos(angle) * radius,
+        y: height / 2 + Math.sin(angle) * radius
+      });
+    });
+
+    ctx.clearRect(0, 0, width, height);
+
+    // 绘制边
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    data.links.forEach(link => {
+      const sourcePos = nodePositions.get(link.source);
+      const targetPos = nodePositions.get(link.target);
+      if (sourcePos && targetPos) {
+        ctx.beginPath();
+        ctx.moveTo(sourcePos.x, sourcePos.y);
+        ctx.lineTo(targetPos.x, targetPos.y);
+        ctx.stroke();
+
+        // 绘制关系标签
+        const midX = (sourcePos.x + targetPos.x) / 2;
+        const midY = (sourcePos.y + targetPos.y) / 2;
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px sans-serif';
+        ctx.fillText(link.relation, midX, midY);
+      }
+    });
+
+    // 绘制节点
+    data.nodes.forEach(node => {
+      const pos = nodePositions.get(node.id);
+      if (!pos) return;
+
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#3b82f6';
+      ctx.fill();
+      ctx.strokeStyle = '#1e40af';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // 绘制节点标签
+      ctx.fillStyle = '#1e293b';
+      ctx.font = '12px sans-serif';
+      ctx.fillText(node.entity_name, pos.x + 12, pos.y + 4);
+    });
+  }, [data]);
+
+  return (
+    <div className="relative w-full h-full">
+      <canvas
+        ref={canvasRef}
+        width={1200}
+        height={600}
+        className="w-full h-full"
+      />
+    </div>
+  );
+}
+
+export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
+  const [graphData, setGraphData] = useState<GraphData>(EMPTY_GRAPH);
+  const [searchEntity, setSearchEntity] = useState('');
+  const [searchDepth, setSearchDepth] = useState('2');
+  const [isSearching, setIsSearching] = useState(false);
+
+  // 使用自定义 hook 获取图谱数据
+  const { data: knowledgeGraph, loading: graphLoading } = useFetchKnowledgeGraph();
+
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const graph = knowledgeGraph?.graph;
+
+    if (graph && Array.isArray(graph.nodes) && Array.isArray(graph.edges)) {
+      setGraphData({
+        nodes: graph.nodes,
+        edges: graph.edges
+      });
+    } else {
+      console.warn('⚠️ 图谱数据为空或结构不完整:', graph);
+    }
+  }, [knowledgeGraph]);
+
+  const handleSearchSubgraph = async () => {
+    if (!searchEntity.trim() || !kbId) return;
+
+    setIsSearching(true);
+    try {
+      const response = await fetch('/api/v1/knowledge_graph/subgraph', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        body: JSON.stringify({
+          graph_id: kbId,
+          entity_name: searchEntity,
+          depth: Number(searchDepth)
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.code === 0 && Array.isArray(result.data?.subgraph?.nodes) && Array.isArray(result.data?.subgraph?.edges)) {
+        setGraphData(result.data.subgraph);
+      } else {
+        console.error('❌ 子图结构不合法:', result);
+      }
+    } catch (err) {
+      console.error('❌ 查询子图失败:', err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleResetView = () => {
+    setSearchEntity('');
+    const graph = knowledgeGraph?.graph;
+    if (graph && Array.isArray(graph.nodes) && Array.isArray(graph.edges)) {
+      setGraphData(graph);
+    }
+  };
+
+  const hasGraph = useMemo(() => graphData.nodes.length > 0 || graphData.edges.length > 0, [graphData]);
+
+  const handleRefreshGraph = () => {
+    queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeGraph'] });
+  };
+
+  if (graphLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-gray-500">加载图谱数据中...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex justify-between items-center mb-4 flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <h2 className="text-xl font-semibold">知识图谱</h2>
+          <div className="text-sm text-gray-500">
+            {graphData.nodes.length || 0} 节点 · {graphData.edges.length || 0} 关系
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <Input
+            placeholder="输入实体名称"
+            value={searchEntity}
+            onChange={(e) => setSearchEntity(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchEntity.trim()) {
+                handleSearchSubgraph();
+              }
+            }}
+            className="w-64"
+          />
+
+          <Select value={searchDepth} onValueChange={setSearchDepth}>
+            <SelectTrigger className="w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1层</SelectItem>
+              <SelectItem value="2">2层</SelectItem>
+              <SelectItem value="3">3层</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button onClick={handleSearchSubgraph} disabled={isSearching || !searchEntity.trim()}>
+            {isSearching ? '查询中...' : '查询子图'}
+          </Button>
+
+          <Button variant="outline" onClick={handleResetView}>
+            重置视图
+          </Button>
+
+          <Button variant="outline" onClick={handleRefreshGraph}>
+            刷新
+          </Button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg border p-4 flex-1 min-h-0">
+        {hasGraph ? (
+          <SimpleForceGraph
+            data={{
+              nodes: graphData.nodes,
+              links: graphData.edges
+            }}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-500">
+            暂无图谱数据
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

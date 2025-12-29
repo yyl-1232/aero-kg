@@ -312,7 +312,7 @@ const UploadCard = ({
               <span>上传中...</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 text-blue-600">
+            <div className="flex items-center gap-2 text-black">
               <Upload className="h-5 w-5" />
               <span>确认上传</span>
             </div>

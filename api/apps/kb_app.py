@@ -319,90 +319,239 @@ def rename_tags(kb_id):
     return get_json_result(data=True)
 
 
-
-
-
 @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
 @login_required
 def knowledge_graph(kb_id):
-    # # 调试信息：当前用户和知识库ID
-    debug_log(f"=== DEBUG: Knowledge Graph Access ===")
-    # print(f"Current user ID: {current_user.id}")
-    # print(f"Requested KB ID: {kb_id}")
-    #
-    # # 替换原有的权限检查 - 只查询自定义的 knowledge_graph 表
+    # 权限验证部分保持不变
+    print(f"=== DEBUG: Knowledge Graph Access ===")
     tenants = UserTenantService.query(user_id=current_user.id)
-    # print(f"User tenants found: {len(tenants)}")
 
     for i, tenant in enumerate(tenants):
-        debug_log(f"  Tenant {i + 1}: {tenant.tenant_id}")
-        # 使用 KnowledgeGraphService 查询自定义表
+        print(f"  Tenant {i + 1}: {tenant.tenant_id}")
         kb_found = KnowledgeGraphService.query(
             tenant_id=tenant.tenant_id,
             id=kb_id,
             status="1"
         )
-        # print(f"    KB found in tenant {tenant.tenant_id}: {bool(kb_found)}")
         if kb_found:
-            debug_log(f"    KB details: id={kb_found[0].id}, name={kb_found[0].name}")
+            print(f"    KB details: id={kb_found[0].id}, name={kb_found[0].name}")
             break
     else:
-        debug_log("=== AUTHORIZATION FAILED ===")
-        debug_log("No tenant contained the requested knowledge base")
+        print("=== AUTHORIZATION FAILED ===")
         obj = {"graph": {}, "mind_map": {}}
         return get_json_result(data=obj)
 
-    debug_log("=== AUTHORIZATION SUCCESS ===")
     kb = kb_found[0]
-    debug_log(f"KB retrieved: tenant_id={kb.tenant_id}, name={kb.name}")
+    print(f"KB retrieved: tenant_id={kb.tenant_id}, name={kb.name}")
 
-    # req = {
-    #     "kb_id": [kb_id],
-    #     "knowledge_graph_kwd": ["graph"]
-    # }
-
+    # 初始化返回对象
     obj = {"name": kb_found[0].name, "graph": {}, "mind_map": {}}
-    index_name = search.index_name(kb.tenant_id)
-    print(f"Checking index existence: {index_name}")
 
-    # if not settings.docStoreConn.indexExist(index_name, kb_id):
-    #     print("Index does not exist, returning empty graph")
-    #     return get_json_result(data=obj)
-    #
-    # sres = settings.retrievaler.search(req, index_name, [kb_id])
-    # print(f"Search results: {len(sres.ids)} documents found")
-    #
-    # if not len(sres.ids):
-    #     print("No graph data found, returning empty graph")
-    #     return get_json_result(data=obj)
-    #
-    # for id in sres.ids[:1]:
-    #     ty = sres.field[id]["knowledge_graph_kwd"]
-    #     print(f"Processing graph type: {ty}")
-    #     try:
-    #         content_json = json.loads(sres.field[id]["content_with_weight"])
-    #         print(f"Successfully parsed JSON with {len(content_json)} keys")
-    #     except Exception as e:
-    #         print(f"Failed to parse JSON: {e}")
-    #         continue
-    #
-    #     obj[ty] = content_json
-
-    # if "nodes" in obj["graph"]:
-    #     node_count = len(obj["graph"]["nodes"])
-    #     print(f"Processing {node_count} nodes")
-    #     obj["graph"]["nodes"] = sorted(obj["graph"]["nodes"], key=lambda x: x.get("pagerank", 0), reverse=True)[:256]
-    #     if "edges" in obj["graph"]:
-    #         edge_count = len(obj["graph"]["edges"])
-    #         print(f"Processing {edge_count} edges")
-    #         node_id_set = {o["id"] for o in obj["graph"]["nodes"]}
-    #         filtered_edges = [o for o in obj["graph"]["edges"] if
-    #                           o["source"] != o["target"] and o["source"] in node_id_set and o["target"] in node_id_set]
-    #         obj["graph"]["edges"] = sorted(filtered_edges, key=lambda x: x.get("weight", 0), reverse=True)[:128]
-    #         print(f"Filtered to {len(obj['graph']['edges'])} edges")
-
+    # 从文件读取数据并转换为图谱格式
+    print(f"=== Retrieving graph data from files ===")
+    graph_data = get_graph_data_from_files(kb)
+    obj["graph"] = graph_data
+    print("obj",obj)
     print("=== GRAPH DATA SUCCESSFULLY RETURNED ===")
     return get_json_result(data=obj)
+
+
+def get_graph_data_from_files(kb):
+    """从关联文件中读取实体和关系数据"""
+    try:
+        print(f"=== Starting to read files for knowledge graph ===")
+        # 获取文件ID列表
+        file_ids = kb.file_ids if kb.file_ids else []
+        if not file_ids:
+            print("No files found for knowledge graph")
+            return {"nodes": [], "edges": []}
+
+        entities = []
+        relations = []
+
+        # 读取文件内容
+        for file_id in file_ids:
+            print(f"Reading file with ID: {file_id}")
+            file_content = get_file_content(file_id)
+            if not file_content:
+                print(f"File content for {file_id} is empty or failed to load.")
+                continue
+
+            try:
+                data = json.loads(file_content)
+                if isinstance(data, list) and len(data) > 0:
+                    # 判断是实体数组还是关系数组
+                    if "entity_kwd" in data[0]:
+                        print(f"  Detected entity data in file {file_id}")
+                        entities.extend(data)
+                    elif "head_entity_id" in data[0]:
+                        print(f"  Detected relation data in file {file_id}")
+                        relations.extend(data)
+            except json.JSONDecodeError as e:
+                print(f"Failed to parse JSON from file {file_id}: {e}")
+                continue
+
+        # 转换为图谱格式
+        print(f"=== Converting data to graph format ===")
+        return convert_to_graph_format(entities, relations)
+
+    except Exception as e:
+        print(f"Error reading graph data from files: {e}")
+        return {"nodes": [], "edges": []}
+
+
+def convert_to_graph_format(entities, relations):
+    """将实体和关系数据转换为图谱格式"""
+    print(f"=== Converting entities and relations to graph format ===")
+    # 创建实体ID到名称的映射
+    entity_map = {str(entity["id"]): entity for entity in entities}
+
+    # 转换节点
+    nodes = []
+    for entity in entities:
+        print(f"  Converting entity {entity['entity_kwd']} to node format.")
+        nodes.append({
+            "id": entity["id"],  # 使用原始ID
+            "entity_name": entity["entity_kwd"],
+            "description": entity.get("description", ""),
+            "entity_type": "ENTITY",
+            "source": entity.get("source", []),
+            "pagerank": 1.0,
+            "communities": []
+        })
+
+        # 转换边
+    edges = []
+    for relation in relations:
+        head_id = str(relation["head_entity_id"])
+        tail_id = str(relation["tail_entity_id"])
+
+        if head_id in entity_map and tail_id in entity_map:
+            print(f"  Adding edge from {entity_map[head_id]['entity_kwd']} to {entity_map[tail_id]['entity_kwd']}.")
+            edges.append({
+                "source": entity_map[head_id]["id"],  # 🔧 修复：使用原始ID
+                "target": entity_map[tail_id]["id"],  # 🔧 修复：使用原始ID
+                "relation": relation.get("relation", ""),
+                "weight": 2.0,
+                "description": f"{relation.get('relation', '')}"
+            })
+
+    return {"nodes": nodes, "edges": edges}
+
+
+def get_file_content(file_id):
+    """获取文件内容（使用存储抽象层）"""
+    try:
+        from api.db.services.file_service import FileService
+        from rag.utils.storage_factory import STORAGE_IMPL
+
+        result = FileService.get_by_id(file_id)
+        if not result or not result[0]:
+            print(f"File {file_id} not found.")
+            return None
+
+        file_doc = result[1]
+        print("File info:")
+        print("  name:", file_doc.name)
+        print("  type:", file_doc.type)
+        print("  source_type:", file_doc.source_type)
+        print("  location:", file_doc.location)
+        # 1️⃣ 优先检查数据库内容字段
+        if hasattr(file_doc, 'content') and file_doc.content:
+            print("Read JSON from file_doc.content")
+            return file_doc.content
+
+            # 2️⃣ 使用存储抽象层读取文件
+        if hasattr(file_doc, 'parent_id') and hasattr(file_doc, 'location'):
+            print(f"Read JSON from storage: {file_doc.location}")
+            blob = STORAGE_IMPL.get(file_doc.parent_id, file_doc.location)
+            if blob:
+                return blob.decode('utf-8') if isinstance(blob, bytes) else blob
+
+        print(f"❌ Unable to retrieve file content for {file_id}")
+        return None
+
+    except Exception as e:
+        print(f"Error reading file {file_id}: {e}")
+        return None
+
+
+# @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
+# @login_required
+# def knowledge_graph(kb_id):
+#     # # 调试信息：当前用户和知识库ID
+#     debug_log(f"=== DEBUG: Knowledge Graph Access ===")
+#     tenants = UserTenantService.query(user_id=current_user.id)
+#
+#     for i, tenant in enumerate(tenants):
+#         debug_log(f"  Tenant {i + 1}: {tenant.tenant_id}")
+#         # 使用 KnowledgeGraphService 查询自定义表
+#         kb_found = KnowledgeGraphService.query(
+#             tenant_id=tenant.tenant_id,
+#             id=kb_id,
+#             status="1"
+#         )
+#         # print(f"    KB found in tenant {tenant.tenant_id}: {bool(kb_found)}")
+#         if kb_found:
+#             debug_log(f"    KB details: id={kb_found[0].id}, name={kb_found[0].name}")
+#             break
+#     else:
+#         debug_log("=== AUTHORIZATION FAILED ===")
+#         debug_log("No tenant contained the requested knowledge base")
+#         obj = {"graph": {}, "mind_map": {}}
+#         return get_json_result(data=obj)
+#
+#     debug_log("=== AUTHORIZATION SUCCESS ===")
+#     kb = kb_found[0]
+#     debug_log(f"KB retrieved: tenant_id={kb.tenant_id}, name={kb.name}")
+#
+#     req = {
+#         "kb_id": [kb_id],
+#         "knowledge_graph_kwd": ["graph"]
+#     }
+#
+#     obj = {"name": kb_found[0].name, "graph": {}, "mind_map": {}}
+#     index_name = search.index_name(kb.tenant_id)
+#     print(f"Checking index existence: {index_name}")
+#
+#     # if not settings.docStoreConn.indexExist(index_name, kb_id):
+#     #     print("Index does not exist, returning empty graph")
+#     #     return get_json_result(data=obj)
+#     #
+#     # sres = settings.retrievaler.search(req, index_name, [kb_id])
+#     # print(f"Search results: {len(sres.ids)} documents found")
+#     #
+#     # if not len(sres.ids):
+#     #     print("No graph data found, returning empty graph")
+#     #     return get_json_result(data=obj)
+#     #
+#     # for id in sres.ids[:1]:
+#     #     ty = sres.field[id]["knowledge_graph_kwd"]
+#     #     print(f"Processing graph type: {ty}")
+#     #     try:
+#     #         content_json = json.loads(sres.field[id]["content_with_weight"])
+#     #         print(f"Successfully parsed JSON with {len(content_json)} keys")
+#     #     except Exception as e:
+#     #         print(f"Failed to parse JSON: {e}")
+#     #         continue
+#     #
+#     #     obj[ty] = content_json
+#
+#     # if "nodes" in obj["graph"]:
+#     #     node_count = len(obj["graph"]["nodes"])
+#     #     print(f"Processing {node_count} nodes")
+#     #     obj["graph"]["nodes"] = sorted(obj["graph"]["nodes"], key=lambda x: x.get("pagerank", 0), reverse=True)[:256]
+#     #     if "edges" in obj["graph"]:
+#     #         edge_count = len(obj["graph"]["edges"])
+#     #         print(f"Processing {edge_count} edges")
+#     #         node_id_set = {o["id"] for o in obj["graph"]["nodes"]}
+#     #         filtered_edges = [o for o in obj["graph"]["edges"] if
+#     #                           o["source"] != o["target"] and o["source"] in node_id_set and o["target"] in node_id_set]
+#     #         obj["graph"]["edges"] = sorted(filtered_edges, key=lambda x: x.get("weight", 0), reverse=True)[:128]
+#     #         print(f"Filtered to {len(obj['graph']['edges'])} edges")
+#
+#     print("=== GRAPH DATA SUCCESSFULLY RETURNED ===")
+#     return get_json_result(data=obj)
 
 
 @manager.route('/<kb_id>/knowledge_graph', methods=['DELETE'])  # noqa: F821
