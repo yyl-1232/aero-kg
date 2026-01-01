@@ -326,6 +326,7 @@ def rm():
 
             graphs = KnowledgeGraphService.query(tenant_id=current_user.id)
             if not graphs:
+                print("未找到知识图谱记录，跳过更新")
             else:
                 graph = graphs[0]
                 current_time = current_timestamp()
