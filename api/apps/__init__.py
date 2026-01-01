@@ -107,7 +107,6 @@ def search_pages_path(pages_dir):
 
 
 def register_page(page_path):
-    print(f"=== Registering: {page_path} ===")
     path = f"{page_path}"
 
     page_name = page_path.stem.removesuffix("_app")
@@ -128,7 +127,6 @@ def register_page(page_path):
     )
 
     app.register_blueprint(page.manager, url_prefix=url_prefix)
-    print(f"=== Registered blueprint: {page_name} ===")
     return url_prefix
 
 

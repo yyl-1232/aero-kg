@@ -45,9 +45,6 @@ from api.db.services.knowledge_graph_service import KnowledgeGraphService
 from datetime import datetime
 import jieba
 
-def debug_log(msg):
-    ts = datetime.now().strftime("[%d/%b/%Y %H:%M:%S]")
-    print(f"{ts} {msg}")
 
 @manager.route('/create', methods=['post'])  # noqa: F821
 @login_required
@@ -329,47 +326,37 @@ def rename_tags(kb_id):
 @login_required
 def knowledge_graph(kb_id):
     # 权限验证部分保持不变
-    print(f"=== DEBUG: Knowledge Graph Access ===")
     tenants = UserTenantService.query(user_id=current_user.id)
 
     for i, tenant in enumerate(tenants):
-        print(f"  Tenant {i + 1}: {tenant.tenant_id}")
         kb_found = KnowledgeGraphService.query(
             tenant_id=tenant.tenant_id,
             id=kb_id,
             status="1"
         )
         if kb_found:
-            print(f"    KB details: id={kb_found[0].id}, name={kb_found[0].name}")
             break
     else:
-        print("=== AUTHORIZATION FAILED ===")
         obj = {"graph": {}, "mind_map": {}}
         return get_json_result(data=obj)
 
     kb = kb_found[0]
-    print(f"KB retrieved: tenant_id={kb.tenant_id}, name={kb.name}")
 
     # 初始化返回对象
     obj = {"name": kb_found[0].name, "graph": {}, "mind_map": {}}
 
     # 从文件读取数据并转换为图谱格式
-    print(f"=== Retrieving graph data from files ===")
     graph_data = get_graph_data_from_files(kb)
     obj["graph"] = graph_data
-    print("obj",obj)
-    print("=== GRAPH DATA SUCCESSFULLY RETURNED ===")
     return get_json_result(data=obj)
 
 
 def get_graph_data_from_files(kb):
     """从关联文件中读取实体和关系数据"""
     try:
-        print(f"=== Starting to read files for knowledge graph ===")
         # 获取文件ID列表
         file_ids = kb.file_ids if kb.file_ids else []
         if not file_ids:
-            print("No files found for knowledge graph")
             return {"nodes": [], "edges": []}
 
         entities = []
@@ -377,10 +364,8 @@ def get_graph_data_from_files(kb):
 
         # 读取文件内容
         for file_id in file_ids:
-            print(f"Reading file with ID: {file_id}")
             file_content = get_file_content(file_id)
             if not file_content:
-                print(f"File content for {file_id} is empty or failed to load.")
                 continue
 
             try:
@@ -388,34 +373,26 @@ def get_graph_data_from_files(kb):
                 if isinstance(data, list) and len(data) > 0:
                     # 判断是实体数组还是关系数组
                     if "entity_kwd" in data[0]:
-                        print(f"  Detected entity data in file {file_id}")
                         entities.extend(data)
                     elif "head_entity_id" in data[0]:
-                        print(f"  Detected relation data in file {file_id}")
                         relations.extend(data)
             except json.JSONDecodeError as e:
-                print(f"Failed to parse JSON from file {file_id}: {e}")
                 continue
 
-        # 转换为图谱格式
-        print(f"=== Converting data to graph format ===")
         return convert_to_graph_format(entities, relations)
 
     except Exception as e:
-        print(f"Error reading graph data from files: {e}")
         return {"nodes": [], "edges": []}
 
 
 def convert_to_graph_format(entities, relations):
     """将实体和关系数据转换为图谱格式"""
-    print(f"=== Converting entities and relations to graph format ===")
     # 创建实体ID到名称的映射
     entity_map = {str(entity["id"]): entity for entity in entities}
 
     # 转换节点
     nodes = []
     for entity in entities:
-        print(f"  Converting entity {entity['entity_kwd']} to node format.")
         nodes.append({
             "id": entity["id"],  # 使用原始ID
             "entity_name": entity["entity_kwd"],
@@ -433,7 +410,6 @@ def convert_to_graph_format(entities, relations):
         tail_id = str(relation["tail_entity_id"])
 
         if head_id in entity_map and tail_id in entity_map:
-            print(f"  Adding edge from {entity_map[head_id]['entity_kwd']} to {entity_map[tail_id]['entity_kwd']}.")
             edges.append({
                 "source": entity_map[head_id]["id"],  # 🔧 修复：使用原始ID
                 "target": entity_map[tail_id]["id"],  # 🔧 修复：使用原始ID
@@ -453,32 +429,22 @@ def get_file_content(file_id):
 
         result = FileService.get_by_id(file_id)
         if not result or not result[0]:
-            print(f"File {file_id} not found.")
             return None
 
         file_doc = result[1]
-        print("File info:")
-        print("  name:", file_doc.name)
-        print("  type:", file_doc.type)
-        print("  source_type:", file_doc.source_type)
-        print("  location:", file_doc.location)
         # 1️⃣ 优先检查数据库内容字段
         if hasattr(file_doc, 'content') and file_doc.content:
-            print("Read JSON from file_doc.content")
             return file_doc.content
 
             # 2️⃣ 使用存储抽象层读取文件
         if hasattr(file_doc, 'parent_id') and hasattr(file_doc, 'location'):
-            print(f"Read JSON from storage: {file_doc.location}")
             blob = STORAGE_IMPL.get(file_doc.parent_id, file_doc.location)
             if blob:
                 return blob.decode('utf-8') if isinstance(blob, bytes) else blob
 
-        print(f"❌ Unable to retrieve file content for {file_id}")
         return None
 
     except Exception as e:
-        print(f"Error reading file {file_id}: {e}")
         return None
 
 
@@ -486,7 +452,6 @@ def get_file_content(file_id):
 @login_required
 def get_subgraph(kb_id):
     """获取指定实体的子图"""
-    print(f"=== DEBUG: Subgraph Access for KB ID {kb_id} ===")
     data = request.get_json()
     entity_name = data.get('entity_name')
     depth = data.get('depth', 2)
@@ -519,7 +484,6 @@ def get_subgraph(kb_id):
 
     # 查找子图
     subgraph = extract_subgraph(graph_data, entity_name, depth)
-    print("subgraph",subgraph)
     return get_json_result(data={"subgraph": subgraph})
 
 
@@ -590,20 +554,12 @@ def knowledge_graph_retrieval_test(kb_id):
     req = request.json
     question = req["question"]
     similarity_threshold = float(req.get("similarity_threshold", 0.3))
-    subgraph_depth = int(req.get("subgraph_depth", 2))
     mode = req.get("mode", "text_match")
 
-    print("========== knowledge_graph_retrieval_test START ==========")
-    print("Question:", question)
-    print("Similarity threshold:", similarity_threshold)
-    print("Subgraph depth:", subgraph_depth)
-    print("Mode:", mode)
-    print("KB ID:", kb_id)
 
     try:
         # 验证知识图谱
         e, kb = KnowledgeGraphService.get_by_id(kb_id)
-        print("KnowledgeGraphService.get_by_id result:", e, getattr(kb, 'id', None))
         if not e:
             return get_data_error_result(message="Knowledge graph not found!")
 
@@ -615,18 +571,12 @@ def knowledge_graph_retrieval_test(kb_id):
                 tenant_ids.append(tenant.tenant_id)
                 break
         else:
-            print("No permission for kb_id:", kb_id)
             return get_json_result(
                 data=False,
                 message='Only owner of knowledge graph authorized for this operation.',
                 code=settings.RetCode.OPERATING_ERROR
             )
-        print("Authorized tenant_ids:", tenant_ids)
 
-        # 初始化检索器
-        kg_search = KGSearch(settings.docStoreConn)
-        idxnms = [index_name(tid) for tid in tenant_ids]
-        print("Index names:", idxnms)
 
         # 获取知识图谱数据
         graph_response = knowledge_graph(kb_id)
@@ -638,7 +588,6 @@ def knowledge_graph_retrieval_test(kb_id):
         nodes = graph.get('nodes', [])
         edges = graph.get('edges', [])
 
-        print(f"Graph loaded: {len(nodes)} nodes, {len(edges)} edges")
 
         # 实体匹配：计算分词结果与图谱实体的相似度
         matched_entities = []
@@ -654,7 +603,6 @@ def knowledge_graph_retrieval_test(kb_id):
             else:
                 # 使用jieba对问题分词
                 question_tokens = list(jieba.cut_for_search(question))
-                print("Question tokens:", question_tokens)
 
                 entity_name_lower = entity_name.lower()
                 entity_desc_lower = entity_desc.lower()
@@ -688,7 +636,6 @@ def knowledge_graph_retrieval_test(kb_id):
 
                 # 按相似度排序
         matched_entities.sort(key=lambda x: x['similarity'], reverse=True)
-        print(f"Matched entities: {len(matched_entities)}")
 
         # 创建实体ID到名称的映射表
         entity_id_to_name = {}
@@ -727,11 +674,9 @@ def knowledge_graph_retrieval_test(kb_id):
             "description": f"基于问题'{question}'找到{len(matched_entities)}个相关实体，{len(matched_relationships)}个相关关系"
         }
 
-        print("========== knowledge_graph_retrieval_test END ==========")
         return get_json_result(data=response_data)
 
     except Exception as e:
-        logging.exception(f"知识图谱检索测试失败: {e}")
         return server_error_response(e)
 
 
