@@ -69,6 +69,10 @@ const methods = {
     url: graph_upload_files,
     method: 'post',
   },
+  graph_list: {
+    url: api.graph_list,
+    method: 'post',
+  },
   getList: {
     url: kb_list,
     method: 'post',
@@ -216,3 +220,4 @@ export const documentFilter = (kb_id: string) =>
   request.post(api.get_dataset_filter, { kb_id });
 
 export default kbService;
+export const getGraphList = () => request.post(api.graph_list);

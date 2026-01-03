@@ -21,6 +21,9 @@ export function useChatSettingSchema() {
     system: z.string().min(1, { message: t('systemMessage') }),
     refine_multiturn: z.boolean(),
     use_kg: z.boolean(),
+    kg_ids: z.array(z.string()).optional(), // 知识图谱ID数组
+    kg_similarity_threshold: z.number().min(0).max(1).optional(), // 相似度阈值
+    kg_mining_depth: z.number().min(1).max(10).optional(), // 挖掘深度
     parameters: z.array(
       z.object({
         key: z.string(),
