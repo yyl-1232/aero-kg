@@ -457,9 +457,12 @@ def chat(dialog, messages, stream=True, **kwargs):
                     kg_result = knowledge_graph_retrieval(
                         kb_id=kg_id,
                         question=" ".join(questions),
-                        similarity_threshold=prompt_config.get("kg_similarity_threshold", 0.3)
+                        similarity_threshold=prompt_config.get("kg_similarity_threshold", 0.3),
+                        subgraph_depth=prompt_config.get("kg_mining_depth", 2)
                     )
                     if kg_result.get("content_with_weight"):
+                        kg_result["kg_id"] = kg_id
+                        kg_result["source_type"] = "knowledge_graph"
                         kbinfos["kg_chunks"].insert(0, kg_result)
 
             knowledges = kb_prompt(kbinfos, max_tokens)

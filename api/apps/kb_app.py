@@ -44,7 +44,9 @@ from api.db.services.knowledge_graph_service import KnowledgeGraphService
 
 from datetime import datetime
 import jieba
-
+from flask import Blueprint
+# 添加这一行
+manager = Blueprint("kb", __name__)
 
 @manager.route('/create', methods=['post'])  # noqa: F821
 @login_required
@@ -544,6 +546,19 @@ def extract_subgraph(graph_data, entity_name, depth):
     }
 
 
+def get_subgraph_internal(kb_id, entity_name, depth=2):
+    """
+    不依赖 Flask 的内部函数版 get_subgraph
+    """
+    # 获取知识图谱
+    e, kb = KnowledgeGraphService.get_by_id(kb_id)
+    if not e:
+        return {"subgraph": {"nodes": [], "edges": []}}
+
+    graph_data = get_graph_data_from_files(kb)
+    subgraph = extract_subgraph(graph_data, entity_name, depth)
+    return subgraph
+
 @manager.route('/<kb_id>/knowledge_graph/retrieval_test', methods=['POST'])
 @login_required
 @validate_request("kb_id", "question")
@@ -551,6 +566,7 @@ def knowledge_graph_retrieval_test(kb_id):
     req = request.json
     question = req["question"]
     similarity_threshold = float(req.get("similarity_threshold", 0.3))
+    subgraph_depth = int(req.get("subgraph_depth", 2))
     mode = req.get("mode", "text_match")
 
     # 校验用户权限
@@ -567,106 +583,155 @@ def knowledge_graph_retrieval_test(kb_id):
             code=settings.RetCode.OPERATING_ERROR
         )
 
-    result = knowledge_graph_retrieval(kb_id, question, similarity_threshold, mode)
+    result = knowledge_graph_retrieval(kb_id, question, similarity_threshold, subgraph_depth, mode)
 
     if "error" in result:
         return get_data_error_result(message=result["error"])
 
     return get_json_result(data=result)
 
-
-def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, mode="text_match"):
+def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, subgraph_depth=2, mode="text_match"):
     """
-    知识图谱检索核心逻辑 - 基于jieba分词 + 文本匹配
+    知识图谱检索核心逻辑
+    1. 问题分词 → 匹配实体
+    2. 以匹配实体为起点 → 获取子图
+    3. 合并子图中的边作为 relationships
     """
     try:
-        # 验证知识图谱
+        # ======================
+        # 1. 校验知识图谱
+        # ======================
         e, kb = KnowledgeGraphService.get_by_id(kb_id)
         if not e:
             return {"content_with_weight": "", "error": "Knowledge graph not found!"}
 
-            # 获取知识图谱数据
+        # ======================
+        # 2. 获取完整图谱
+        # ======================
         graph_response = knowledge_graph(kb_id)
         if graph_response.status_code != 200:
             return {"content_with_weight": "", "error": "Failed to get knowledge graph data"}
 
-        graph_data = graph_response.get_json()['data']
-        graph = graph_data.get('graph', {})
+        graph = graph_response.get_json()['data']['graph']
         nodes = graph.get('nodes', [])
         edges = graph.get('edges', [])
 
-        # 实体匹配逻辑
+        # 构建 ID → 实体名 映射（非常关键）
+        entity_id_to_name = {
+            node['id']: node.get('entity_name')
+            for node in nodes if node.get('id') is not None
+        }
+
+        # ======================
+        # 3. 实体匹配
+        # ======================
         matched_entities = []
-        entity_similarity_map = {}
+        question_tokens = list(jieba.cut_for_search(question.lower()))
 
         for node in nodes:
             entity_name = node.get('entity_name', '')
             entity_desc = node.get('description', '')
 
-            # 精确匹配检查
-            if question.lower().strip() == entity_name.lower().strip():
+            entity_name_lower = entity_name.lower()
+            entity_desc_lower = entity_desc.lower()
+
+            max_similarity = 0.0
+
+            # 精确匹配
+            if question.strip().lower() == entity_name_lower:
                 max_similarity = 1.0
             else:
-                # jieba分词匹配
-                question_tokens = list(jieba.cut_for_search(question))
-                entity_name_lower = entity_name.lower()
-                entity_desc_lower = entity_desc.lower()
-                max_similarity = 0.0
-
                 for token in question_tokens:
-                    token_lower = token.lower()
-                    if token_lower in entity_name_lower:
-                        similarity = len(token_lower) / len(entity_name_lower) if entity_name_lower else 0
-                    elif token_lower in entity_desc_lower:
-                        similarity = len(token_lower) / len(entity_desc_lower) if entity_desc_lower else 0
+                    if token in entity_name_lower:
+                        sim = len(token) / len(entity_name_lower)
+                    elif token in entity_desc_lower:
+                        sim = len(token) / len(entity_desc_lower)
                     else:
-                        similarity = 1 - (edit_distance(token_lower, entity_name_lower) / max(len(token_lower),
-                                                                                              len(entity_name_lower))) if entity_name_lower else 0
-                    max_similarity = max(max_similarity, similarity)
+                        sim = 1 - (
+                            edit_distance(token, entity_name_lower) /
+                            max(len(token), len(entity_name_lower))
+                        ) if entity_name_lower else 0
+                    max_similarity = max(max_similarity, sim)
 
             if max_similarity >= similarity_threshold:
                 matched_entities.append({
-                    'id': node.get('id'),
-                    'entity_name': entity_name,
-                    'entity_type': node.get('entity_type'),
-                    'similarity': max_similarity,
-                    'description': entity_desc
-                })
-                entity_similarity_map[node.get('id')] = max_similarity
-
-                # 按相似度排序
-        matched_entities.sort(key=lambda x: x['similarity'], reverse=True)
-
-        # 获取相关关系
-        entity_id_to_name = {node.get('id'): node.get('entity_name') for node in nodes if
-                             node.get('id') and node.get('entity_name')}
-        matched_entity_ids = {entity['id'] for entity in matched_entities}
-        matched_relationships = []
-
-        for edge in edges:
-            source_id = edge.get('source')
-            target_id = edge.get('target')
-            if source_id in matched_entity_ids or target_id in matched_entity_ids:
-                source_name = entity_id_to_name.get(source_id, str(source_id))
-                target_name = entity_id_to_name.get(target_id, str(target_id))
-                matched_relationships.append({
-                    'source': source_name,
-                    'target': target_name,
-                    'source_id': source_id,
-                    'target_id': target_id,
-                    'description': edge.get('description'),
-                    'weight': edge.get('weight', 0)
+                    "id": node.get("id"),
+                    "entity_name": entity_name,
+                    "entity_type": node.get("entity_type"),
+                    "similarity": round(max_similarity, 4),
+                    "description": entity_desc
                 })
 
-                # 构建content_with_weight内容
+        matched_entities.sort(key=lambda x: x["similarity"], reverse=True)
+
+        # 如果没有实体命中，直接返回
+        if not matched_entities:
+            return {
+                "content_with_weight": "",
+                "entities": [],
+                "relationships": [],
+                "chunk_id": get_uuid(),
+                "doc_id": "",
+                "docnm_kwd": "Knowledge Graph",
+                "similarity": 0.0,
+                "vector": []
+            }
+
+        # ======================
+        # 4. 子图扩展（核心）
+        # ======================
+        all_edges = {}
+
+        for entity in matched_entities:
+            # 调用你已有的「非 Flask 版」子图函数
+            subgraph = get_subgraph_internal(
+                kb_id,
+                entity["entity_name"],
+                depth=subgraph_depth
+            )
+            # subgraph = {"nodes": [...], "edges": [...]}
+            for edge in subgraph.get("edges", []):
+                source_id = edge.get("source")
+                target_id = edge.get("target")
+
+                if source_id is None or target_id is None:
+                    continue
+
+                key = (source_id, target_id)
+
+                all_edges[key] = {
+                    "source_id": source_id,
+                    "target_id": target_id,
+                    "source": entity_id_to_name.get(source_id, str(source_id)),
+                    "target": entity_id_to_name.get(target_id, str(target_id)),
+                    "description": edge.get("description"),
+                    "relation": edge.get("relation"),
+                    "weight": edge.get("weight", 0)
+                }
+
+        matched_relationships = list(all_edges.values())
+        # ======================
+        # 5. 构建 content_with_weight
+        # ======================
         entities_text = "\n".join(
-            [f"实体: {e['entity_name']} (类型: {e['entity_type']}, 相似度: {e['similarity']:.2f}) - {e['description']}"
-             for e in matched_entities])
+            f"实体: {e['entity_name']} (类型: {e['entity_type']}, 相似度: {e['similarity']}) - {e['description']}"
+            for e in matched_entities
+        )
+
         relationships_text = "\n".join(
-            [f"关系: {r['source']} -> {r['target']} - {r['description']}" for r in matched_relationships])
+            f"关系: {r['source']} -> {r['target']} ({r.get('relation')})"
+            for r in matched_relationships
+        )
 
-        content_with_weight = f"知识图谱检索结果:\n\n{entities_text}\n\n{relationships_text}"
+        content_with_weight = (
+            "知识图谱检索结果:\n\n"
+            f"{entities_text}\n\n"
+            f"{relationships_text}"
+        )
 
+        # ======================
+        # 6. 返回
+        # ======================
         return {
             "content_with_weight": content_with_weight,
             "entities": matched_entities,
@@ -680,6 +745,9 @@ def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, mode="t
 
     except Exception as e:
         return {"content_with_weight": "", "error": str(e)}
+
+
+
 
 
 def edit_distance(s1, s2):
