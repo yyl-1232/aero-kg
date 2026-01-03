@@ -14,6 +14,7 @@
 #  limitations under the License.
 #
 import binascii
+import json
 import logging
 import re
 import time
@@ -45,7 +46,7 @@ from rag.prompts import chunks_format, citation_prompt, cross_languages, full_qu
 from rag.prompts.prompts import gen_meta_filter, PROMPT_JINJA_ENV, ASK_SUMMARY
 from rag.utils import num_tokens_from_string, rmSpace
 from rag.utils.tavily_conn import Tavily
-
+from api.apps.kb_app import knowledge_graph_retrieval
 
 class DialogService(CommonService):
     model = Dialog
@@ -305,6 +306,17 @@ def meta_filter(metas: dict, filters: list[dict]):
 
 
 def chat(dialog, messages, stream=True, **kwargs):
+    print("=" * 60)
+    print("ALL CONFIGURATION PARAMETERS:")
+    print(f"Dialog ID: {dialog.id}")
+    print(f"LLM ID: {dialog.llm_id}")
+    print(f"KB IDs: {dialog.kb_ids}")
+    print(f"Prompt Config: {json.dumps(dialog.prompt_config, ensure_ascii=False, indent=2)}")
+    print(f"Similarity Threshold: {dialog.similarity_threshold}")
+    print(f"Top N: {dialog.top_n}")
+    print(f"Vector Similarity Weight: {dialog.vector_similarity_weight}")
+    print(f"Additional kwargs: {json.dumps(kwargs, ensure_ascii=False, indent=2)}")
+    print("=" * 60)
     assert messages[-1]["role"] == "user", "The last content of this conversation is not from user."
     if not dialog.kb_ids and not dialog.prompt_config.get("tavily_api_key"):
         for ans in chat_solo(dialog, messages, stream):
@@ -389,7 +401,7 @@ def chat(dialog, messages, stream=True, **kwargs):
     refine_question_ts = timer()
 
     thought = ""
-    kbinfos = {"total": 0, "chunks": [], "doc_aggs": []}
+    kbinfos = {"total": 0, "chunks": [], "doc_aggs": [], "kg_chunks": []}
     knowledges = []
 
     if attachments is not None and "knowledge" in [p["key"] for p in prompt_config["parameters"]]:
@@ -441,9 +453,16 @@ def chat(dialog, messages, stream=True, **kwargs):
                 kbinfos["chunks"].extend(tav_res["chunks"])
                 kbinfos["doc_aggs"].extend(tav_res["doc_aggs"])
             if prompt_config.get("use_kg"):
-                ck = settings.kg_retrievaler.retrieval(" ".join(questions), tenant_ids, dialog.kb_ids, embd_mdl, LLMBundle(dialog.tenant_id, LLMType.CHAT))
-                if ck["content_with_weight"]:
-                    kbinfos["chunks"].insert(0, ck)
+                kg_result = knowledge_graph_retrieval(
+                    kb_id=dialog.kb_ids[0],
+                    question=" ".join(questions),
+                    similarity_threshold=prompt_config.get("kg_similarity_threshold", 0.3)
+                )
+                if kg_result.get("content_with_weight"):
+                    kbinfos["kg_chunks"].insert(0, kg_result)
+                # ck = settings.kg_retrievaler.retrieval(" ".join(questions), tenant_ids, dialog.kb_ids, embd_mdl, LLMBundle(dialog.tenant_id, LLMType.CHAT))
+                # if ck["content_with_weight"]:
+                #     kbinfos["chunks"].insert(0, ck)
 
             knowledges = kb_prompt(kbinfos, max_tokens)
 

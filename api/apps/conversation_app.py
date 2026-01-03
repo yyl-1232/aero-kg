@@ -169,6 +169,11 @@ def list_conversation():
 @validate_request("conversation_id", "messages")
 def completion():
     req = request.json
+    req = request.json
+    print("="*60)
+    print("RAW REQUEST PARAMETERS:")
+    print(json.dumps(req, ensure_ascii=False, indent=2))
+    print("="*60)
     msg = []
     for m in req["messages"]:
         if m["role"] == "system":

@@ -248,9 +248,7 @@ def upload_graph_files(graph_id):
                 location += "_"
 
             blob = file.read()
-            print(f"File {file.filename} size: {len(blob)} bytes")
             STORAGE_IMPL.put(graph_folder.id, location, blob)
-            print(f"Stored file at: {graph_folder.id}/{location}")
 
             # 解析文件内容获取统计信息
             try:
@@ -274,7 +272,6 @@ def upload_graph_files(graph_id):
                 "source_type": FileSource.KNOWLEDGEGRAPH
             }
             file_record = FileService.insert(file_record)
-            print(f"Database record created: {file_record.id}")
             file_results.append(file_record.to_json())
 
             # 更新知识图谱统计信息
@@ -295,7 +292,6 @@ def upload_graph_files(graph_id):
 
         # 更新数据库
         KnowledgeGraphService.update_by_id(graph_id, update_data)
-        print(f"Updated graph {graph_id}: {node_num} nodes, {edge_num} edges, {len(all_file_ids)} files")
 
         return get_json_result(data=file_results)
     except Exception as e:

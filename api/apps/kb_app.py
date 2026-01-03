@@ -544,52 +544,58 @@ def extract_subgraph(graph_data, entity_name, depth):
     }
 
 
-@manager.route('/<kb_id>/knowledge_graph/retrieval_test', methods=['POST'])  # noqa: F821
+@manager.route('/<kb_id>/knowledge_graph/retrieval_test', methods=['POST'])
 @login_required
 @validate_request("kb_id", "question")
 def knowledge_graph_retrieval_test(kb_id):
-    """
-    知识图谱检索测试接口 - 基于jieba分词 + 文本匹配
-    """
     req = request.json
     question = req["question"]
     similarity_threshold = float(req.get("similarity_threshold", 0.3))
     mode = req.get("mode", "text_match")
 
+    # 校验用户权限
+    tenants = UserTenantService.query(user_id=current_user.id)
+    tenant_ids = []
+    for tenant in tenants:
+        if KnowledgeGraphService.query(tenant_id=tenant.tenant_id, id=kb_id):
+            tenant_ids.append(tenant.tenant_id)
+            break
+    else:
+        return get_json_result(
+            data=False,
+            message='Only owner of knowledge graph authorized for this operation.',
+            code=settings.RetCode.OPERATING_ERROR
+        )
 
+    result = knowledge_graph_retrieval(kb_id, question, similarity_threshold, mode)
+
+    if "error" in result:
+        return get_data_error_result(message=result["error"])
+
+    return get_json_result(data=result)
+
+
+def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, mode="text_match"):
+    """
+    知识图谱检索核心逻辑 - 基于jieba分词 + 文本匹配
+    """
     try:
         # 验证知识图谱
         e, kb = KnowledgeGraphService.get_by_id(kb_id)
         if not e:
-            return get_data_error_result(message="Knowledge graph not found!")
+            return {"content_with_weight": "", "error": "Knowledge graph not found!"}
 
-            # 校验用户权限
-        tenants = UserTenantService.query(user_id=current_user.id)
-        tenant_ids = []
-        for tenant in tenants:
-            if KnowledgeGraphService.query(tenant_id=tenant.tenant_id, id=kb_id):
-                tenant_ids.append(tenant.tenant_id)
-                break
-        else:
-            return get_json_result(
-                data=False,
-                message='Only owner of knowledge graph authorized for this operation.',
-                code=settings.RetCode.OPERATING_ERROR
-            )
-
-
-        # 获取知识图谱数据
+            # 获取知识图谱数据
         graph_response = knowledge_graph(kb_id)
         if graph_response.status_code != 200:
-            return get_data_error_result(message="Failed to get knowledge graph data")
+            return {"content_with_weight": "", "error": "Failed to get knowledge graph data"}
 
         graph_data = graph_response.get_json()['data']
         graph = graph_data.get('graph', {})
         nodes = graph.get('nodes', [])
         edges = graph.get('edges', [])
 
-
-        # 实体匹配：计算分词结果与图谱实体的相似度
+        # 实体匹配逻辑
         matched_entities = []
         entity_similarity_map = {}
 
@@ -597,31 +603,25 @@ def knowledge_graph_retrieval_test(kb_id):
             entity_name = node.get('entity_name', '')
             entity_desc = node.get('description', '')
 
-            # 首先检查精确匹配
+            # 精确匹配检查
             if question.lower().strip() == entity_name.lower().strip():
-                max_similarity = 1.0  # 100%相似度
+                max_similarity = 1.0
             else:
-                # 使用jieba对问题分词
+                # jieba分词匹配
                 question_tokens = list(jieba.cut_for_search(question))
-
                 entity_name_lower = entity_name.lower()
                 entity_desc_lower = entity_desc.lower()
-
-                # 计算与每个token的相似度
                 max_similarity = 0.0
+
                 for token in question_tokens:
                     token_lower = token.lower()
-
-                    # 简单的字符串包含相似度计算
                     if token_lower in entity_name_lower:
                         similarity = len(token_lower) / len(entity_name_lower) if entity_name_lower else 0
                     elif token_lower in entity_desc_lower:
                         similarity = len(token_lower) / len(entity_desc_lower) if entity_desc_lower else 0
                     else:
-                        # 使用编辑距离计算相似度
                         similarity = 1 - (edit_distance(token_lower, entity_name_lower) / max(len(token_lower),
                                                                                               len(entity_name_lower))) if entity_name_lower else 0
-
                     max_similarity = max(max_similarity, similarity)
 
             if max_similarity >= similarity_threshold:
@@ -637,47 +637,49 @@ def knowledge_graph_retrieval_test(kb_id):
                 # 按相似度排序
         matched_entities.sort(key=lambda x: x['similarity'], reverse=True)
 
-        # 创建实体ID到名称的映射表
-        entity_id_to_name = {}
-        for node in nodes:
-            entity_id = node.get('id')
-            entity_name = node.get('entity_name')
-            if entity_id and entity_name:
-                entity_id_to_name[entity_id] = entity_name
-
-                # 获取相关关系
+        # 获取相关关系
+        entity_id_to_name = {node.get('id'): node.get('entity_name') for node in nodes if
+                             node.get('id') and node.get('entity_name')}
         matched_entity_ids = {entity['id'] for entity in matched_entities}
         matched_relationships = []
 
         for edge in edges:
             source_id = edge.get('source')
             target_id = edge.get('target')
-
             if source_id in matched_entity_ids or target_id in matched_entity_ids:
-                # 获取实体名称，如果找不到则使用ID
                 source_name = entity_id_to_name.get(source_id, str(source_id))
                 target_name = entity_id_to_name.get(target_id, str(target_id))
-
                 matched_relationships.append({
-                    'source': source_name,  # 使用实体名称而不是ID
-                    'target': target_name,  # 使用实体名称而不是ID
-                    'source_id': source_id,  # 保留原始ID
-                    'target_id': target_id,  # 保留原始ID
+                    'source': source_name,
+                    'target': target_name,
+                    'source_id': source_id,
+                    'target_id': target_id,
                     'description': edge.get('description'),
                     'weight': edge.get('weight', 0)
                 })
 
-                # 构建返回结果
-        response_data = {
+                # 构建content_with_weight内容
+        entities_text = "\n".join(
+            [f"实体: {e['entity_name']} (类型: {e['entity_type']}, 相似度: {e['similarity']:.2f}) - {e['description']}"
+             for e in matched_entities])
+        relationships_text = "\n".join(
+            [f"关系: {r['source']} -> {r['target']} - {r['description']}" for r in matched_relationships])
+
+        content_with_weight = f"知识图谱检索结果:\n\n{entities_text}\n\n{relationships_text}"
+
+        return {
+            "content_with_weight": content_with_weight,
             "entities": matched_entities,
             "relationships": matched_relationships,
-            "description": f"基于问题'{question}'找到{len(matched_entities)}个相关实体，{len(matched_relationships)}个相关关系"
+            "chunk_id": get_uuid(),
+            "doc_id": "",
+            "docnm_kwd": "Knowledge Graph",
+            "similarity": 1.0,
+            "vector": []
         }
 
-        return get_json_result(data=response_data)
-
     except Exception as e:
-        return server_error_response(e)
+        return {"content_with_weight": "", "error": str(e)}
 
 
 def edit_distance(s1, s2):
