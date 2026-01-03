@@ -453,16 +453,14 @@ def chat(dialog, messages, stream=True, **kwargs):
                 kbinfos["chunks"].extend(tav_res["chunks"])
                 kbinfos["doc_aggs"].extend(tav_res["doc_aggs"])
             if prompt_config.get("use_kg"):
-                kg_result = knowledge_graph_retrieval(
-                    kb_id=dialog.kb_ids[0],
-                    question=" ".join(questions),
-                    similarity_threshold=prompt_config.get("kg_similarity_threshold", 0.3)
-                )
-                if kg_result.get("content_with_weight"):
-                    kbinfos["kg_chunks"].insert(0, kg_result)
-                # ck = settings.kg_retrievaler.retrieval(" ".join(questions), tenant_ids, dialog.kb_ids, embd_mdl, LLMBundle(dialog.tenant_id, LLMType.CHAT))
-                # if ck["content_with_weight"]:
-                #     kbinfos["chunks"].insert(0, ck)
+                for kg_id in dialog.kg_ids:
+                    kg_result = knowledge_graph_retrieval(
+                        kb_id=kg_id,
+                        question=" ".join(questions),
+                        similarity_threshold=prompt_config.get("kg_similarity_threshold", 0.3)
+                    )
+                    if kg_result.get("content_with_weight"):
+                        kbinfos["kg_chunks"].insert(0, kg_result)
 
             knowledges = kb_prompt(kbinfos, max_tokens)
 
