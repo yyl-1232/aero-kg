@@ -75,19 +75,15 @@ const ChatConfigurationModal = ({
 
   const handleOk = async () => {
     try {
-      console.log('开始保存，验证表单...');
       const values = await form.validateFields();
-      console.log('表单验证通过，values:', values);
 
       if (hasError) {
-        console.log('存在错误，停止保存');
         return;
       }
       const nextValues: any = removeUselessFieldsFromValues(
         values,
         'llm_setting.',
       );
-      console.log('处理后的值:', nextValues);
       const emptyResponse = nextValues.prompt_config?.empty_response ?? '';
       const icon = await getBase64FromUploadFileList(values.icon);
 
@@ -102,12 +98,8 @@ const ChatConfigurationModal = ({
         },
         icon,
       };
-      console.log('最终保存的数据:', finalValues);
       onOk(finalValues);
-    } catch (error) {
-      console.error('保存失败:', error);
-      console.error('表单字段:', form.getFieldsValue());
-    }
+    } catch (error) {}
   };
 
   const handleSegmentedChange = (val: SegmentedValue) => {

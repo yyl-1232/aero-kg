@@ -54,7 +54,8 @@ export function KgSelector() {
 
   // 其他函数直接操作表单值
   const toggleOption = (option: string) => {
-    const currentValues = form.getFieldValue('prompt_config.kg_ids') || [];
+    // 修复：使用 getValues() 替代 getFieldValue()
+    const currentValues = form.getValues('prompt_config.kg_ids') || [];
     const newSelectedValues = currentValues.includes(option)
       ? currentValues.filter((value) => value !== option)
       : [...currentValues, option];
@@ -66,24 +67,16 @@ export function KgSelector() {
   };
 
   const handleClear = () => {
-    setSelectedValues([]);
+    // 修复：直接使用 form.setValue() 而不是不存在的 setSelectedValues
     form.setValue('prompt_config.kg_ids', []);
   };
-
-  // const toggleOption = (option: string) => {
-  //   const newSelectedValues = selectedValues.includes(option)
-  //     ? selectedValues.filter((value) => value !== option)
-  //     : [...selectedValues, option];
-  //   setSelectedValues(newSelectedValues);
-  //   form.setValue('prompt_config.kg_ids', newSelectedValues);
-  // };
 
   const toggleAll = () => {
     if (selectedValues.length === kgOptions.length) {
       handleClear();
     } else {
       const allValues = kgOptions.map((option) => option.value);
-      setSelectedValues(allValues);
+      // 修复：直接使用 form.setValue() 而不是不存在的 setSelectedValues
       form.setValue('prompt_config.kg_ids', allValues);
     }
   };
@@ -92,9 +85,10 @@ export function KgSelector() {
     if (event.key === 'Enter') {
       setOpen(true);
     } else if (event.key === 'Backspace' && !event.currentTarget.value) {
-      const newSelectedValues = [...selectedValues];
+      // 修复：使用 getValues() 获取当前值
+      const currentValues = form.getValues('prompt_config.kg_ids') || [];
+      const newSelectedValues = [...currentValues];
       newSelectedValues.pop();
-      setSelectedValues(newSelectedValues);
       form.setValue('prompt_config.kg_ids', newSelectedValues);
     }
   };
