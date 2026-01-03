@@ -74,30 +74,40 @@ const ChatConfigurationModal = ({
   const { t } = useTranslate('chat');
 
   const handleOk = async () => {
-    const values = await form.validateFields();
-    if (hasError) {
-      return;
+    try {
+      console.log('开始保存，验证表单...');
+      const values = await form.validateFields();
+      console.log('表单验证通过，values:', values);
+
+      if (hasError) {
+        console.log('存在错误，停止保存');
+        return;
+      }
+      const nextValues: any = removeUselessFieldsFromValues(
+        values,
+        'llm_setting.',
+      );
+      console.log('处理后的值:', nextValues);
+      const emptyResponse = nextValues.prompt_config?.empty_response ?? '';
+      const icon = await getBase64FromUploadFileList(values.icon);
+
+      const finalValues = {
+        dialog_id: initialDialog.id,
+        ...nextValues,
+        vector_similarity_weight: 1 - nextValues.vector_similarity_weight,
+        prompt_config: {
+          ...nextValues.prompt_config,
+          parameters: promptEngineRef.current,
+          empty_response: emptyResponse,
+        },
+        icon,
+      };
+      console.log('最终保存的数据:', finalValues);
+      onOk(finalValues);
+    } catch (error) {
+      console.error('保存失败:', error);
+      console.error('表单字段:', form.getFieldsValue());
     }
-    const nextValues: any = removeUselessFieldsFromValues(
-      values,
-      'llm_setting.',
-    );
-    const emptyResponse = nextValues.prompt_config?.empty_response ?? '';
-
-    const icon = await getBase64FromUploadFileList(values.icon);
-
-    const finalValues = {
-      dialog_id: initialDialog.id,
-      ...nextValues,
-      vector_similarity_weight: 1 - nextValues.vector_similarity_weight,
-      prompt_config: {
-        ...nextValues.prompt_config,
-        parameters: promptEngineRef.current,
-        empty_response: emptyResponse,
-      },
-      icon,
-    };
-    onOk(finalValues);
   };
 
   const handleSegmentedChange = (val: SegmentedValue) => {
@@ -138,6 +148,13 @@ const ChatConfigurationModal = ({
         llm_id: initialDialog.llm_id ?? modelId,
         vector_similarity_weight:
           1 - (initialDialog.vector_similarity_weight ?? 0.3),
+        prompt_config: {
+          ...initialDialog.prompt_config,
+          kg_ids: initialDialog.prompt_config?.kg_ids || [],
+          kg_similarity_threshold:
+            initialDialog.prompt_config?.kg_similarity_threshold ?? 0.3,
+          kg_mining_depth: initialDialog.prompt_config?.kg_mining_depth ?? 2,
+        },
       });
     }
   }, [initialDialog, form, visible, modelId]);

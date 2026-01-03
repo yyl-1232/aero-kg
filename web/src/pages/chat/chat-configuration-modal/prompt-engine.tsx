@@ -89,15 +89,11 @@ const PromptEngine = (
     setDataSource(newData);
   };
 
-  useImperativeHandle(
-    ref,
-    () => {
-      return dataSource
-        .filter((x) => x.variable.trim() !== '')
-        .map((x) => ({ key: x.variable, optional: x.optional }));
-    },
-    [dataSource],
-  );
+  useImperativeHandle(ref, () => {
+    return dataSource
+      .filter((x) => x.variable.trim() !== '')
+      .map((x) => ({ key: x.variable, optional: x.optional }));
+  }, [dataSource]);
 
   const columns: TableProps<DataType>['columns'] = [
     {
@@ -173,6 +169,7 @@ const PromptEngine = (
       <UseKnowledgeGraphItem
         filedName={['prompt_config', 'use_kg']}
       ></UseKnowledgeGraphItem>
+      {Form.useWatch(['prompt_config', 'use_kg'], form) && <KgSelector />}
       <Form.Item
         label={t('reasoning')}
         tooltip={t('reasoningTip')}

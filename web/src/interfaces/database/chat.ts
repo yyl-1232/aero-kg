@@ -10,6 +10,9 @@ export interface PromptConfig {
   keyword: boolean;
   refine_multiturn: boolean;
   use_kg: boolean;
+  kg_ids?: string[]; // 需要添加这个字段
+  kg_similarity_threshold?: number; // 需要添加这个字段
+  kg_mining_depth?: number; // 需要添加这个字段
 }
 
 export interface Parameter {

@@ -1,3 +1,4 @@
+import { RAGFlowAvatar } from '@/components/ragflow-avatar';
 import { SliderInputFormField } from '@/components/slider-input-form-field';
 import { Button } from '@/components/ui/button';
 import {
@@ -26,7 +27,7 @@ import {
   useFetchKnowledgeGraphList,
 } from '@/hooks/use-knowledge-graph-request';
 import { cn } from '@/lib/utils';
-import { CheckIcon } from 'lucide-react';
+import { CheckIcon, ChevronDown, XCircle, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 
@@ -35,14 +36,30 @@ export function KgSelector() {
   const [open, setOpen] = useState(false);
   const { knowledgeGraphs, loading } = useFetchKnowledgeGraphList();
 
-  const selectedKgIds = form.watch('prompt_config.kg_ids') || [];
-  const [selectedValues, setSelectedValues] = useState<string[]>(selectedKgIds);
+  // 直接使用表单值，不维护本地状态
+  const selectedValues = form.watch('prompt_config.kg_ids') || [];
 
   const kgOptions = knowledgeGraphs.map((kg: IKnowledgeGraph) => ({
     label: kg.name,
     value: kg.id,
     description: kg.description,
+    icon: () => (
+      <RAGFlowAvatar
+        className="size-4 mr-2"
+        avatar={kg.avatar}
+        name={kg.name}
+      />
+    ),
   }));
+
+  // 其他函数直接操作表单值
+  const toggleOption = (option: string) => {
+    const currentValues = form.getFieldValue('prompt_config.kg_ids') || [];
+    const newSelectedValues = currentValues.includes(option)
+      ? currentValues.filter((value) => value !== option)
+      : [...currentValues, option];
+    form.setValue('prompt_config.kg_ids', newSelectedValues);
+  };
 
   const handleTogglePopover = () => {
     setOpen((prev) => !prev);
@@ -53,13 +70,13 @@ export function KgSelector() {
     form.setValue('prompt_config.kg_ids', []);
   };
 
-  const toggleOption = (option: string) => {
-    const newSelectedValues = selectedValues.includes(option)
-      ? selectedValues.filter((value) => value !== option)
-      : [...selectedValues, option];
-    setSelectedValues(newSelectedValues);
-    form.setValue('prompt_config.kg_ids', newSelectedValues);
-  };
+  // const toggleOption = (option: string) => {
+  //   const newSelectedValues = selectedValues.includes(option)
+  //     ? selectedValues.filter((value) => value !== option)
+  //     : [...selectedValues, option];
+  //   setSelectedValues(newSelectedValues);
+  //   form.setValue('prompt_config.kg_ids', newSelectedValues);
+  // };
 
   const toggleAll = () => {
     if (selectedValues.length === kgOptions.length) {
@@ -100,19 +117,56 @@ export function KgSelector() {
                       'flex w-full p-1 rounded-md text-base text-text-primary border min-h-10 h-auto items-center justify-between bg-inherit hover:bg-inherit [&_svg]:pointer-events-auto',
                     )}
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={cn(
-                          selectedValues.length === 0
-                            ? 'text-muted-foreground text-sm'
-                            : 'text-sm',
-                        )}
-                      >
-                        {selectedValues.length > 0
-                          ? `${selectedValues.length}/${kgOptions?.length ?? 0} 知识图谱`
-                          : '请选择'}
-                      </span>
-                    </div>
+                    {selectedValues.length > 0 ? (
+                      <div className="flex justify-between items-center w-full">
+                        <div className="flex flex-wrap items-center">
+                          {selectedValues?.slice(0, 3)?.map((value) => {
+                            const option = kgOptions.find(
+                              (o) => o.value === value,
+                            );
+                            const IconComponent = option?.icon;
+                            return (
+                              <div
+                                key={value}
+                                className="flex items-center gap-1 px-2 py-1 bg-secondary rounded-sm mr-2 mb-1"
+                              >
+                                {IconComponent && <IconComponent />}
+                                <span className="text-sm">{option?.label}</span>
+                                <XCircle
+                                  className="h-3 w-3 cursor-pointer ml-1"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    toggleOption(value);
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                          {selectedValues.length > 3 && (
+                            <span className="text-sm text-muted-foreground">
+                              +{selectedValues.length - 3} 更多
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <XIcon
+                            className="h-4 mx-2 cursor-pointer text-muted-foreground"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleClear();
+                            }}
+                          />
+                          <ChevronDown className="h-4 mx-2 cursor-pointer text-muted-foreground" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-sm text-muted-foreground mx-3">
+                          请选择知识图谱
+                        </span>
+                        <ChevronDown className="h-4 cursor-pointer text-muted-foreground mx-2" />
+                      </div>
+                    )}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent
@@ -165,6 +219,7 @@ export function KgSelector() {
                               >
                                 <CheckIcon className="h-4 w-4" />
                               </div>
+                              {option.icon && <option.icon />}
                               <span>{option.label}</span>
                             </CommandItem>
                           );
@@ -174,24 +229,18 @@ export function KgSelector() {
                       <CommandGroup>
                         <div className="flex items-center justify-between">
                           {selectedValues.length > 0 && (
-                            <>
-                              <CommandItem
-                                onSelect={handleClear}
-                                className="flex-1 justify-center cursor-pointer"
-                              >
-                                清除
-                              </CommandItem>
-                              <CommandSeparator
-                                orientation="vertical"
-                                className="flex min-h-6 h-full"
-                              />
-                            </>
+                            <CommandItem
+                              onSelect={handleClear}
+                              className="flex-1 justify-center cursor-pointer"
+                            >
+                              Clear
+                            </CommandItem>
                           )}
                           <CommandItem
                             onSelect={() => setOpen(false)}
                             className="flex-1 justify-center cursor-pointer max-w-full"
                           >
-                            关闭
+                            Close
                           </CommandItem>
                         </div>
                       </CommandGroup>
