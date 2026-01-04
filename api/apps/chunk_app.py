@@ -349,14 +349,14 @@ def retrieval_test():
                                doc_ids, rerank_mdl=rerank_mdl, highlight=req.get("highlight"),
                                rank_feature=labels
                                )
-        if use_kg:
-            ck = settings.kg_retrievaler.retrieval(question,
-                                                   tenant_ids,
-                                                   kb_ids,
-                                                   embd_mdl,
-                                                   LLMBundle(kb.tenant_id, LLMType.CHAT))
-            if ck["content_with_weight"]:
-                ranks["chunks"].insert(0, ck)
+        # if use_kg:
+        #     ck = settings.kg_retrievaler.retrieval(question,
+        #                                            tenant_ids,
+        #                                            kb_ids,
+        #                                            embd_mdl,
+        #                                            LLMBundle(kb.tenant_id, LLMType.CHAT))
+        #     if ck["content_with_weight"]:
+        #         ranks["chunks"].insert(0, ck)
 
         for c in ranks["chunks"]:
             c.pop("vector", None)
