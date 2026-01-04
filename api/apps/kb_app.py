@@ -323,14 +323,32 @@ def rename_tags(kb_id):
                                      kb_id)
     return get_json_result(data=True)
 
-
 @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
 @login_required
 def knowledge_graph(kb_id):
-    # 权限验证部分保持不变
-    tenants = UserTenantService.query(user_id=current_user.id)
+    """
+    HTTP 层：
+    - 只做登录校验
+    - 只处理 HTTP 返回
+    """
+    obj = knowledge_graph_internal(
+        kb_id=kb_id,
+        user_id=current_user.id
+    )
+    return get_json_result(data=obj)
 
-    for i, tenant in enumerate(tenants):
+def knowledge_graph_internal(kb_id, user_id):
+    """
+    纯业务逻辑：
+    - 不依赖 Flask
+    - 不使用 current_user / request / jsonify
+    - 返回 Python dict
+    """
+
+    # 权限验证（基于 user_id）
+    tenants = UserTenantService.query(user_id=user_id)
+
+    for tenant in tenants:
         kb_found = KnowledgeGraphService.query(
             tenant_id=tenant.tenant_id,
             id=kb_id,
@@ -339,18 +357,53 @@ def knowledge_graph(kb_id):
         if kb_found:
             break
     else:
-        obj = {"graph": {}, "mind_map": {}}
-        return get_json_result(data=obj)
+        return {
+            "name": "",
+            "graph": {},
+            "mind_map": {}
+        }
 
     kb = kb_found[0]
 
-    # 初始化返回对象
-    obj = {"name": kb_found[0].name, "graph": {}, "mind_map": {}}
+    # 构建返回对象
+    obj = {
+        "name": kb.name,
+        "graph": {},
+        "mind_map": {}
+    }
 
-    # 从文件读取数据并转换为图谱格式
+    # 从文件读取并转换图谱
     graph_data = get_graph_data_from_files(kb)
     obj["graph"] = graph_data
-    return get_json_result(data=obj)
+
+    return obj
+# @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
+# @login_required
+# def knowledge_graph(kb_id):
+#     # 权限验证部分保持不变
+#     tenants = UserTenantService.query(user_id=current_user.id)
+#
+#     for i, tenant in enumerate(tenants):
+#         kb_found = KnowledgeGraphService.query(
+#             tenant_id=tenant.tenant_id,
+#             id=kb_id,
+#             status="1"
+#         )
+#         if kb_found:
+#             break
+#     else:
+#         obj = {"graph": {}, "mind_map": {}}
+#         return get_json_result(data=obj)
+#
+#     kb = kb_found[0]
+#
+#     # 初始化返回对象
+#     obj = {"name": kb_found[0].name, "graph": {}, "mind_map": {}}
+#
+#     # 从文件读取数据并转换为图谱格式
+#     graph_data = get_graph_data_from_files(kb)
+#     obj["graph"] = graph_data
+#     return get_json_result(data=obj)
 
 
 def get_graph_data_from_files(kb):
@@ -590,7 +643,7 @@ def knowledge_graph_retrieval_test(kb_id):
 
     return get_json_result(data=result)
 
-def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, subgraph_depth=2, mode="text_match"):
+def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, subgraph_depth=2, mode="text_match",user_id = None):
     """
     知识图谱检索核心逻辑
     1. 问题分词 → 匹配实体
@@ -608,13 +661,12 @@ def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, subgrap
         # ======================
         # 2. 获取完整图谱
         # ======================
-        graph_response = knowledge_graph(kb_id)
-        if graph_response.status_code != 200:
-            return {"content_with_weight": "", "error": "Failed to get knowledge graph data"}
+        graph_data = knowledge_graph_internal(kb_id, user_id)
 
-        graph = graph_response.get_json()['data']['graph']
-        nodes = graph.get('nodes', [])
-        edges = graph.get('edges', [])
+        # graph_data 是 dict，不是 response
+        graph = graph_data.get("graph", {})
+        nodes = graph.get("nodes", [])
+        edges = graph.get("edges", [])
 
         # 构建 ID → 实体名 映射（非常关键）
         entity_id_to_name = {

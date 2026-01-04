@@ -169,7 +169,6 @@ def list_conversation():
 @validate_request("conversation_id", "messages")
 def completion():
     req = request.json
-    req = request.json
     print("="*60)
     print("RAW REQUEST PARAMETERS:")
     print(json.dumps(req, ensure_ascii=False, indent=2))
@@ -222,10 +221,11 @@ def completion():
             dia.llm_setting = chat_model_config
 
         is_embedded = bool(chat_model_id)
+        user_id = getattr(current_user, 'id', None) if current_user else None
         def stream():
             nonlocal dia, msg, req, conv
             try:
-                for ans in chat(dia, msg, True, **req):
+                for ans in chat(dia, msg, True, user_id=user_id, **req):
                     ans = structure_answer(conv, ans, message_id, conv.id)
                     yield "data:" + json.dumps({"code": 0, "message": "", "data": ans}, ensure_ascii=False) + "\n\n"
                 if not is_embedded:
@@ -245,7 +245,7 @@ def completion():
 
         else:
             answer = None
-            for ans in chat(dia, msg, **req):
+            for ans in chat(dia, msg, user_id=user_id, **req):
                 answer = structure_answer(conv, ans, message_id, conv.id)
                 if not is_embedded:
                     ConversationService.update_by_id(conv.id, conv.to_dict())

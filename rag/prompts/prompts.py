@@ -123,8 +123,15 @@ def kb_prompt(kbinfos, max_tokens, hash_id=False):
     knowledges = []
     for i, ck in enumerate(kbinfos["chunks"][:chunks_num]):
         cnt = "\nID: {}".format(i if not hash_id else hash_str2int(get_value(ck, "id", "chunk_id"), 100))
+
+        # 添加来源标识
+        if ck.get("source_type") == "knowledge_graph":
+            cnt += f"\n├── Source: Knowledge Graph (ID: {ck.get('kg_name', 'Unknown')})"
+        else:
+            cnt += "\n├── Source: Document Library"
+
         cnt += draw_node("Title", get_value(ck, "docnm_kwd", "document_name"))
-        cnt += draw_node("URL", ck['url'])  if "url" in ck else ""
+        cnt += draw_node("URL", ck['url']) if "url" in ck else ""
         for k, v in docs.get(get_value(ck, "doc_id", "document_id"), {}).items():
             cnt += draw_node(k, v)
         cnt += "\n└── Content:\n"

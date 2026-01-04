@@ -33,6 +33,7 @@ from api.db import LLMType, ParserType, StatusEnum
 from api.db.db_models import DB, Dialog
 from api.db.services.common_service import CommonService
 from api.db.services.document_service import DocumentService
+from api.db.services.knowledge_graph_service import KnowledgeGraphService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.langfuse_service import TenantLangfuseService
 from api.db.services.llm_service import LLMBundle
@@ -42,11 +43,13 @@ from graphrag.general.mind_map_extractor import MindMapExtractor
 from rag.app.resume import forbidden_select_fields4resume
 from rag.app.tag import label_question
 from rag.nlp.search import index_name
-from rag.prompts import chunks_format, citation_prompt, cross_languages, full_question, kb_prompt, keyword_extraction, message_fit_in
+from rag.prompts import chunks_format, citation_prompt, cross_languages, full_question, kb_prompt, keyword_extraction, \
+    message_fit_in
 from rag.prompts.prompts import gen_meta_filter, PROMPT_JINJA_ENV, ASK_SUMMARY
 from rag.utils import num_tokens_from_string, rmSpace
 from rag.utils.tavily_conn import Tavily
 from api.apps.kb_app import knowledge_graph_retrieval
+
 
 class DialogService(CommonService):
     model = Dialog
@@ -104,7 +107,8 @@ class DialogService(CommonService):
 
     @classmethod
     @DB.connection_context()
-    def get_by_tenant_ids(cls, joined_tenant_ids, user_id, page_number, items_per_page, orderby, desc, keywords, parser_id=None):
+    def get_by_tenant_ids(cls, joined_tenant_ids, user_id, page_number, items_per_page, orderby, desc, keywords,
+                          parser_id=None):
         from api.db.db_models import User
 
         fields = [
@@ -136,7 +140,8 @@ class DialogService(CommonService):
                 cls.model.select(*fields)
                 .join(User, on=(cls.model.tenant_id == User.id))
                 .where(
-                    (cls.model.tenant_id.in_(joined_tenant_ids) | (cls.model.tenant_id == user_id)) & (cls.model.status == StatusEnum.VALID.value),
+                    (cls.model.tenant_id.in_(joined_tenant_ids) | (cls.model.tenant_id == user_id)) & (
+                                cls.model.status == StatusEnum.VALID.value),
                     (fn.LOWER(cls.model.name).contains(keywords.lower())),
                 )
             )
@@ -145,7 +150,8 @@ class DialogService(CommonService):
                 cls.model.select(*fields)
                 .join(User, on=(cls.model.tenant_id == User.id))
                 .where(
-                    (cls.model.tenant_id.in_(joined_tenant_ids) | (cls.model.tenant_id == user_id)) & (cls.model.status == StatusEnum.VALID.value),
+                    (cls.model.tenant_id.in_(joined_tenant_ids) | (cls.model.tenant_id == user_id)) & (
+                                cls.model.status == StatusEnum.VALID.value),
                 )
             )
         if parser_id:
@@ -173,25 +179,29 @@ def chat_solo(dialog, messages, stream=True):
     tts_mdl = None
     if prompt_config.get("tts"):
         tts_mdl = LLMBundle(dialog.tenant_id, LLMType.TTS)
-    msg = [{"role": m["role"], "content": re.sub(r"##\d+\$\$", "", m["content"])} for m in messages if m["role"] != "system"]
+    msg = [{"role": m["role"], "content": re.sub(r"##\d+\$\$", "", m["content"])} for m in messages if
+           m["role"] != "system"]
     if stream:
         last_ans = ""
         delta_ans = ""
         for ans in chat_mdl.chat_streamly(prompt_config.get("system", ""), msg, dialog.llm_setting):
             answer = ans
-            delta_ans = ans[len(last_ans) :]
+            delta_ans = ans[len(last_ans):]
             if num_tokens_from_string(delta_ans) < 16:
                 continue
             last_ans = answer
-            yield {"answer": answer, "reference": {}, "audio_binary": tts(tts_mdl, delta_ans), "prompt": "", "created_at": time.time()}
+            yield {"answer": answer, "reference": {}, "audio_binary": tts(tts_mdl, delta_ans), "prompt": "",
+                   "created_at": time.time()}
             delta_ans = ""
         if delta_ans:
-            yield {"answer": answer, "reference": {}, "audio_binary": tts(tts_mdl, delta_ans), "prompt": "", "created_at": time.time()}
+            yield {"answer": answer, "reference": {}, "audio_binary": tts(tts_mdl, delta_ans), "prompt": "",
+                   "created_at": time.time()}
     else:
         answer = chat_mdl.chat(prompt_config.get("system", ""), msg, dialog.llm_setting)
         user_content = msg[-1].get("content", "[content not available]")
         logging.debug("User: {}|Assistant: {}".format(user_content, answer))
-        yield {"answer": answer, "reference": {}, "audio_binary": tts(tts_mdl, answer), "prompt": "", "created_at": time.time()}
+        yield {"answer": answer, "reference": {}, "audio_binary": tts(tts_mdl, answer), "prompt": "",
+               "created_at": time.time()}
 
 
 def get_models(dialog):
@@ -270,19 +280,19 @@ def meta_filter(metas: dict, filters: list[dict]):
                 value = str(value)
 
             for conds in [
-                    (operator == "contains", str(value).lower() in str(input).lower()),
-                    (operator == "not contains", str(value).lower() not in str(input).lower()),
-                    (operator == "start with", str(input).lower().startswith(str(value).lower())),
-                    (operator == "end with", str(input).lower().endswith(str(value).lower())),
-                    (operator == "empty", not input),
-                    (operator == "not empty", input),
-                    (operator == "=", input == value),
-                    (operator == "≠", input != value),
-                    (operator == ">", input > value),
-                    (operator == "<", input < value),
-                    (operator == "≥", input >= value),
-                    (operator == "≤", input <= value),
-                ]:
+                (operator == "contains", str(value).lower() in str(input).lower()),
+                (operator == "not contains", str(value).lower() not in str(input).lower()),
+                (operator == "start with", str(input).lower().startswith(str(value).lower())),
+                (operator == "end with", str(input).lower().endswith(str(value).lower())),
+                (operator == "empty", not input),
+                (operator == "not empty", input),
+                (operator == "=", input == value),
+                (operator == "≠", input != value),
+                (operator == ">", input > value),
+                (operator == "<", input < value),
+                (operator == "≥", input >= value),
+                (operator == "≤", input <= value),
+            ]:
                 try:
                     if all(conds):
                         ids.extend(docids)
@@ -305,7 +315,7 @@ def meta_filter(metas: dict, filters: list[dict]):
     return list(doc_ids)
 
 
-def chat(dialog, messages, stream=True, **kwargs):
+def chat(dialog, messages, stream=True,user_id=None, **kwargs):
     print("=" * 60)
     print("ALL CONFIGURATION PARAMETERS:")
     print(f"Dialog ID: {dialog.id}")
@@ -338,7 +348,8 @@ def chat(dialog, messages, stream=True, **kwargs):
     trace_context = {}
     langfuse_keys = TenantLangfuseService.filter_by_tenant(tenant_id=dialog.tenant_id)
     if langfuse_keys:
-        langfuse = Langfuse(public_key=langfuse_keys.public_key, secret_key=langfuse_keys.secret_key, host=langfuse_keys.host)
+        langfuse = Langfuse(public_key=langfuse_keys.public_key, secret_key=langfuse_keys.secret_key,
+                            host=langfuse_keys.host)
         if langfuse.auth_check():
             langfuse_tracer = langfuse
             trace_id = langfuse_tracer.create_trace_id()
@@ -401,7 +412,7 @@ def chat(dialog, messages, stream=True, **kwargs):
     refine_question_ts = timer()
 
     thought = ""
-    kbinfos = {"total": 0, "chunks": [], "doc_aggs": [], "kg_chunks": []}
+    kbinfos = {"total": 0, "chunks": [], "doc_aggs": []}
     knowledges = []
 
     if attachments is not None and "knowledge" in [p["key"] for p in prompt_config["parameters"]]:
@@ -453,17 +464,25 @@ def chat(dialog, messages, stream=True, **kwargs):
                 kbinfos["chunks"].extend(tav_res["chunks"])
                 kbinfos["doc_aggs"].extend(tav_res["doc_aggs"])
             if prompt_config.get("use_kg"):
-                for kg_id in dialog.kg_ids:
+                for kg_id in prompt_config.get("kg_ids", []):
+                    print("kg_id", kg_id)
+                    e, kg = KnowledgeGraphService.get_by_id(kg_id)
+                    print("e,kg", e, kg)
+                    kg_name = kg.name if e else "Unknown"
+                    print("kg_name",kg_name)
                     kg_result = knowledge_graph_retrieval(
                         kb_id=kg_id,
                         question=" ".join(questions),
                         similarity_threshold=prompt_config.get("kg_similarity_threshold", 0.3),
-                        subgraph_depth=prompt_config.get("kg_mining_depth", 2)
+                        subgraph_depth=prompt_config.get("kg_mining_depth", 2),
+                        user_id=user_id or dialog.tenant_id,
                     )
+                    print("kg_result", kg_result)
                     if kg_result.get("content_with_weight"):
                         kg_result["kg_id"] = kg_id
+                        kg_result["kg_name"] = kg_name
                         kg_result["source_type"] = "knowledge_graph"
-                        kbinfos["kg_chunks"].insert(0, kg_result)
+                        kbinfos["chunks"].insert(0, kg_result)
 
             knowledges = kb_prompt(kbinfos, max_tokens)
 
@@ -472,7 +491,8 @@ def chat(dialog, messages, stream=True, **kwargs):
     retrieval_ts = timer()
     if not knowledges and prompt_config.get("empty_response"):
         empty_res = prompt_config["empty_response"]
-        yield {"answer": empty_res, "reference": kbinfos, "prompt": "\n\n### Query:\n%s" % " ".join(questions), "audio_binary": tts(tts_mdl, empty_res)}
+        yield {"answer": empty_res, "reference": kbinfos, "prompt": "\n\n### Query:\n%s" % " ".join(questions),
+               "audio_binary": tts(tts_mdl, empty_res)}
         return {"answer": prompt_config["empty_response"], "reference": kbinfos}
 
     kwargs["knowledge"] = "\n------\n" + "\n\n------\n\n".join(knowledges)
@@ -482,7 +502,8 @@ def chat(dialog, messages, stream=True, **kwargs):
     prompt4citation = ""
     if knowledges and (prompt_config.get("quote", True) and kwargs.get("quote", True)):
         prompt4citation = citation_prompt()
-    msg.extend([{"role": m["role"], "content": re.sub(r"##\d+\$\$", "", m["content"])} for m in messages if m["role"] != "system"])
+    msg.extend([{"role": m["role"], "content": re.sub(r"##\d+\$\$", "", m["content"])} for m in messages if
+                m["role"] != "system"])
     used_token_count, msg = message_fit_in(msg, int(max_tokens * 0.95))
     assert len(msg) >= 2, f"message_fit_in has bug: {msg}"
     prompt = msg[0]["content"]
@@ -566,11 +587,13 @@ def chat(dialog, messages, stream=True, **kwargs):
             langfuse_generation.update(output=langfuse_output)
             langfuse_generation.end()
 
-        return {"answer": think + answer, "reference": refs, "prompt": re.sub(r"\n", "  \n", prompt), "created_at": time.time()}
+        return {"answer": think + answer, "reference": refs, "prompt": re.sub(r"\n", "  \n", prompt),
+                "created_at": time.time()}
 
     if langfuse_tracer:
         langfuse_generation = langfuse_tracer.start_generation(
-            trace_context=trace_context, name="chat", model=llm_model_config["llm_name"], input={"prompt": prompt, "prompt4citation": prompt4citation, "messages": msg}
+            trace_context=trace_context, name="chat", model=llm_model_config["llm_name"],
+            input={"prompt": prompt, "prompt4citation": prompt4citation, "messages": msg}
         )
 
     if stream:
@@ -580,12 +603,12 @@ def chat(dialog, messages, stream=True, **kwargs):
             if thought:
                 ans = re.sub(r"^.*</think>", "", ans, flags=re.DOTALL)
             answer = ans
-            delta_ans = ans[len(last_ans) :]
+            delta_ans = ans[len(last_ans):]
             if num_tokens_from_string(delta_ans) < 16:
                 continue
             last_ans = answer
             yield {"answer": thought + answer, "reference": {}, "audio_binary": tts(tts_mdl, delta_ans)}
-        delta_ans = answer[len(last_ans) :]
+        delta_ans = answer[len(last_ans):]
         if delta_ans:
             yield {"answer": thought + answer, "reference": {}, "audio_binary": tts(tts_mdl, delta_ans)}
         yield decorate_answer(thought + answer)
@@ -660,7 +683,8 @@ Please write the SQL, only SQL, without any other explanations or text.
         {}
 
         Please correct the error and write SQL again, only SQL, without any other explanations or text.
-        """.format(index_name(tenant_id), "\n".join([f"{k}: {v}" for k, v in field_map.items()]), question, sql, tbl["error"])
+        """.format(index_name(tenant_id), "\n".join([f"{k}: {v}" for k, v in field_map.items()]), question, sql,
+                   tbl["error"])
         tbl, sql = get_table()
         logging.debug("TRY it again: {}".format(sql))
 
@@ -674,7 +698,9 @@ Please write the SQL, only SQL, without any other explanations or text.
 
     # compose Markdown table
     columns = (
-        "|" + "|".join([re.sub(r"(/.*|（[^（）]+）)", "", field_map.get(tbl["columns"][i]["name"], tbl["columns"][i]["name"])) for i in column_idx]) + ("|Source|" if docid_idx and docid_idx else "|")
+            "|" + "|".join(
+        [re.sub(r"(/.*|（[^（）]+）)", "", field_map.get(tbl["columns"][i]["name"], tbl["columns"][i]["name"])) for i in
+         column_idx]) + ("|Source|" if docid_idx and docid_idx else "|")
     )
 
     line = "|" + "|".join(["------" for _ in range(len(column_idx))]) + ("|------|" if docid_idx and docid_idx else "")
@@ -689,7 +715,8 @@ Please write the SQL, only SQL, without any other explanations or text.
 
     if not docid_idx or not doc_name_idx:
         logging.warning("SQL missing field: " + sql)
-        return {"answer": "\n".join([columns, line, rows]), "reference": {"chunks": [], "doc_aggs": []}, "prompt": sys_prompt}
+        return {"answer": "\n".join([columns, line, rows]), "reference": {"chunks": [], "doc_aggs": []},
+                "prompt": sys_prompt}
 
     docid_idx = list(docid_idx)[0]
     doc_name_idx = list(doc_name_idx)[0]
@@ -702,7 +729,8 @@ Please write the SQL, only SQL, without any other explanations or text.
         "answer": "\n".join([columns, line, rows]),
         "reference": {
             "chunks": [{"doc_id": r[docid_idx], "docnm_kwd": r[doc_name_idx]} for r in tbl["rows"]],
-            "doc_aggs": [{"doc_id": did, "doc_name": d["doc_name"], "count": d["count"]} for did, d in doc_aggs.items()],
+            "doc_aggs": [{"doc_id": did, "doc_name": d["doc_name"], "count": d["count"]} for did, d in
+                         doc_aggs.items()],
         },
         "prompt": sys_prompt,
     }
@@ -751,7 +779,7 @@ def ask(question, kb_ids, tenant_id, chat_llm_name=None, search_config={}):
                 doc_ids = None
 
     kbinfos = retriever.retrieval(
-        question = question,
+        question=question,
         embd_mdl=embd_mdl,
         tenant_ids=tenant_ids,
         kb_ids=kb_ids,
@@ -773,7 +801,9 @@ def ask(question, kb_ids, tenant_id, chat_llm_name=None, search_config={}):
 
     def decorate_answer(answer):
         nonlocal knowledges, kbinfos, sys_prompt
-        answer, idx = retriever.insert_citations(answer, [ck["content_ltks"] for ck in kbinfos["chunks"]], [ck["vector"] for ck in kbinfos["chunks"]], embd_mdl, tkweight=0.7, vtweight=0.3)
+        answer, idx = retriever.insert_citations(answer, [ck["content_ltks"] for ck in kbinfos["chunks"]],
+                                                 [ck["vector"] for ck in kbinfos["chunks"]], embd_mdl, tkweight=0.7,
+                                                 vtweight=0.3)
         idx = set([kbinfos["chunks"][int(i)]["doc_id"] for i in idx])
         recall_docs = [d for d in kbinfos["doc_aggs"] if d["doc_id"] in idx]
         if not recall_docs:
