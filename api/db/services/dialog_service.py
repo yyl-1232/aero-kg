@@ -316,17 +316,6 @@ def meta_filter(metas: dict, filters: list[dict]):
 
 
 def chat(dialog, messages, stream=True,user_id=None, **kwargs):
-    print("=" * 60)
-    print("ALL CONFIGURATION PARAMETERS:")
-    print(f"Dialog ID: {dialog.id}")
-    print(f"LLM ID: {dialog.llm_id}")
-    print(f"KB IDs: {dialog.kb_ids}")
-    print(f"Prompt Config: {json.dumps(dialog.prompt_config, ensure_ascii=False, indent=2)}")
-    print(f"Similarity Threshold: {dialog.similarity_threshold}")
-    print(f"Top N: {dialog.top_n}")
-    print(f"Vector Similarity Weight: {dialog.vector_similarity_weight}")
-    print(f"Additional kwargs: {json.dumps(kwargs, ensure_ascii=False, indent=2)}")
-    print("=" * 60)
     assert messages[-1]["role"] == "user", "The last content of this conversation is not from user."
     if not dialog.kb_ids and not dialog.prompt_config.get("tavily_api_key"):
         for ans in chat_solo(dialog, messages, stream):
@@ -465,11 +454,8 @@ def chat(dialog, messages, stream=True,user_id=None, **kwargs):
                 kbinfos["doc_aggs"].extend(tav_res["doc_aggs"])
             if prompt_config.get("use_kg"):
                 for kg_id in prompt_config.get("kg_ids", []):
-                    print("kg_id", kg_id)
                     e, kg = KnowledgeGraphService.get_by_id(kg_id)
-                    print("e,kg", e, kg)
                     kg_name = kg.name if e else "Unknown"
-                    print("kg_name",kg_name)
                     kg_result = knowledge_graph_retrieval(
                         kb_id=kg_id,
                         question=" ".join(questions),
@@ -477,7 +463,6 @@ def chat(dialog, messages, stream=True,user_id=None, **kwargs):
                         subgraph_depth=prompt_config.get("kg_mining_depth", 2),
                         user_id=user_id or dialog.tenant_id,
                     )
-                    print("kg_result", kg_result)
                     if kg_result.get("content_with_weight"):
                         kg_result["kg_id"] = kg_id
                         kg_result["kg_name"] = kg_name
