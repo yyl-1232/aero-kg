@@ -45,8 +45,10 @@ from api.db.services.knowledge_graph_service import KnowledgeGraphService
 from datetime import datetime
 import jieba
 from flask import Blueprint
+
 # 添加这一行
 manager = Blueprint("kb", __name__)
+
 
 @manager.route('/create', methods=['post'])  # noqa: F821
 @login_required
@@ -87,7 +89,8 @@ def create():
 @manager.route('/update', methods=['post'])  # noqa: F821
 @login_required
 @validate_request("kb_id", "name", "description", "parser_id")
-@not_allowed_parameters("id", "tenant_id", "created_by", "create_time", "update_time", "create_date", "update_date", "created_by")
+@not_allowed_parameters("id", "tenant_id", "created_by", "create_time", "update_time", "create_date", "update_date",
+                        "created_by")
 def update():
     req = request.json
     if not isinstance(req["name"], str):
@@ -119,7 +122,8 @@ def update():
 
         if req["name"].lower() != kb.name.lower() \
                 and len(
-            KnowledgebaseService.query(name=req["name"], tenant_id=current_user.id, status=StatusEnum.VALID.value)) >= 1:
+            KnowledgebaseService.query(name=req["name"], tenant_id=current_user.id,
+                                       status=StatusEnum.VALID.value)) >= 1:
             return get_data_error_result(
                 message="Duplicated knowledgebase name.")
 
@@ -130,11 +134,11 @@ def update():
         if kb.pagerank != req.get("pagerank", 0):
             if req.get("pagerank", 0) > 0:
                 settings.docStoreConn.update({"kb_id": kb.id}, {PAGERANK_FLD: req["pagerank"]},
-                                         search.index_name(kb.tenant_id), kb.id)
+                                             search.index_name(kb.tenant_id), kb.id)
             else:
                 # Elasticsearch requires PAGERANK_FLD be non-zero!
                 settings.docStoreConn.update({"exists": PAGERANK_FLD}, {"remove": PAGERANK_FLD},
-                                         search.index_name(kb.tenant_id), kb.id)
+                                             search.index_name(kb.tenant_id), kb.id)
 
         e, kb = KnowledgebaseService.get_by_id(kb.id)
         if not e:
@@ -166,7 +170,7 @@ def detail():
         if not kb:
             return get_data_error_result(
                 message="Can't find this knowledgebase!")
-        kb["size"] = DocumentService.get_total_size_by_kb_id(kb_id=kb["id"],keywords="", run_status=[], types=[])
+        kb["size"] = DocumentService.get_total_size_by_kb_id(kb_id=kb["id"], keywords="", run_status=[], types=[])
         return get_json_result(data=kb)
     except Exception as e:
         return server_error_response(e)
@@ -202,10 +206,11 @@ def list_kbs():
             kbs = [kb for kb in kbs if kb["tenant_id"] in tenants]
             total = len(kbs)
             if page_number and items_per_page:
-                kbs = kbs[(page_number-1)*items_per_page:page_number*items_per_page]
+                kbs = kbs[(page_number - 1) * items_per_page:page_number * items_per_page]
         return get_json_result(data={"kbs": kbs, "total": total})
     except Exception as e:
         return server_error_response(e)
+
 
 @manager.route('/rm', methods=['post'])  # noqa: F821
 @login_required
@@ -318,10 +323,11 @@ def rename_tags(kb_id):
     e, kb = KnowledgebaseService.get_by_id(kb_id)
 
     settings.docStoreConn.update({"tag_kwd": req["from_tag"], "kb_id": [kb_id]},
-                                     {"remove": {"tag_kwd": req["from_tag"].strip()}, "add": {"tag_kwd": req["to_tag"]}},
-                                     search.index_name(kb.tenant_id),
-                                     kb_id)
+                                 {"remove": {"tag_kwd": req["from_tag"].strip()}, "add": {"tag_kwd": req["to_tag"]}},
+                                 search.index_name(kb.tenant_id),
+                                 kb_id)
     return get_json_result(data=True)
+
 
 @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
 @login_required
@@ -336,6 +342,7 @@ def knowledge_graph(kb_id):
         user_id=current_user.id
     )
     return get_json_result(data=obj)
+
 
 def knowledge_graph_internal(kb_id, user_id):
     """
@@ -377,6 +384,8 @@ def knowledge_graph_internal(kb_id, user_id):
     obj["graph"] = graph_data
 
     return obj
+
+
 # @manager.route('/<kb_id>/knowledge_graph', methods=['GET'])  # noqa: F821
 # @login_required
 # def knowledge_graph(kb_id):
@@ -612,6 +621,7 @@ def get_subgraph_internal(kb_id, entity_name, depth=2):
     subgraph = extract_subgraph(graph_data, entity_name, depth)
     return subgraph
 
+
 @manager.route('/<kb_id>/knowledge_graph/retrieval_test', methods=['POST'])
 @login_required
 @validate_request("kb_id", "question")
@@ -636,14 +646,14 @@ def knowledge_graph_retrieval_test(kb_id):
             code=settings.RetCode.OPERATING_ERROR
         )
 
-    result = knowledge_graph_retrieval(kb_id, question, similarity_threshold, subgraph_depth, mode)
-
+    result = knowledge_graph_retrieval(kb_id, question, similarity_threshold, subgraph_depth, mode, current_user.id)
     if "error" in result:
         return get_data_error_result(message=result["error"])
 
     return get_json_result(data=result)
 
-def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, subgraph_depth=2, mode="text_match",user_id = None):
+
+def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, subgraph_depth=2, mode="text_match", user_id=None):
     """
     知识图谱检索核心逻辑
     1. 问题分词 → 匹配实体
@@ -700,8 +710,8 @@ def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, subgrap
                         sim = len(token) / len(entity_desc_lower)
                     else:
                         sim = 1 - (
-                            edit_distance(token, entity_name_lower) /
-                            max(len(token), len(entity_name_lower))
+                                edit_distance(token, entity_name_lower) /
+                                max(len(token), len(entity_name_lower))
                         ) if entity_name_lower else 0
                     max_similarity = max(max_similarity, sim)
 
@@ -797,9 +807,6 @@ def knowledge_graph_retrieval(kb_id, question, similarity_threshold=0.3, subgrap
 
     except Exception as e:
         return {"content_with_weight": "", "error": str(e)}
-
-
-
 
 
 def edit_distance(s1, s2):
@@ -911,7 +918,8 @@ def delete_knowledge_graph(kb_id):
             code=settings.RetCode.AUTHENTICATION_ERROR
         )
     _, kb = KnowledgebaseService.get_by_id(kb_id)
-    settings.docStoreConn.delete({"knowledge_graph_kwd": ["graph", "subgraph", "entity", "relation"]}, search.index_name(kb.tenant_id), kb_id)
+    settings.docStoreConn.delete({"knowledge_graph_kwd": ["graph", "subgraph", "entity", "relation"]},
+                                 search.index_name(kb.tenant_id), kb_id)
 
     return get_json_result(data=True)
 
