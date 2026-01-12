@@ -354,7 +354,8 @@ export const FileUpload = () => {
             disabled={!entityFile || !relationFile || uploading}
             onClick={handleUploadAll}
             style={{
-              height: '5rem',
+              height: '4rem', // 从 5rem 改为 4rem（更矮）
+              width: '24rem', // 添加宽度 24rem（更宽）
               paddingLeft: '1.5rem',
               paddingRight: '1.5rem',
             }}

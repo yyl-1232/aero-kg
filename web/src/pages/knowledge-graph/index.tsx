@@ -50,7 +50,7 @@ export default function KnowledgeGraphPage() {
   return (
     <section className="flex h-full flex-col w-full">
       <Helmet>
-        <title>{t('header.knowledgeGraph')}</title>
+        <title>{'AeroKG'}</title>
       </Helmet>
 
       <div className="p-8">

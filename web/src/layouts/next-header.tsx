@@ -108,7 +108,7 @@ export function Header() {
         <img
           src={'/logo.svg'}
           alt="logo"
-          className="size-10 mr-[12]"
+          className="w-[120px] h-[120px] mr-[24]"
           onClick={handleLogoClick}
         />
         {/* GitHub图标隐藏 */}

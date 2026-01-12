@@ -693,7 +693,6 @@ function DetailPanel({
   );
 }
 
-// ✅ 演示组件：模拟你的数据结构
 export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
   const queryClient = useQueryClient();
 
@@ -717,13 +716,12 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
    */
   useEffect(() => {
     const graph = knowledgeGraph?.graph;
-
     if (graph && Array.isArray(graph.nodes) && Array.isArray(graph.edges)) {
       setGraphData(graph);
-
       // 只在首次加载真实图谱时保存一份原始数据
       setOriginalGraphData((prev) => (prev.nodes.length === 0 ? graph : prev));
     }
+    queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeGraph'] });
   }, [knowledgeGraph]);
 
   /**
