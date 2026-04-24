@@ -11,6 +11,7 @@ export interface IKnowledgeGraph {
   update_time: number;
   permission: string;
   status: string;
+  nickname?: string;
 }
 
 export const useFetchKnowledgeGraphList = () => {

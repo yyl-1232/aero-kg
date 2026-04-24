@@ -1,4 +1,4 @@
-import { LlmModelType } from '@/constants/knowledge';
+import { DocumentParserType, LlmModelType } from '@/constants/knowledge';
 import { useSetModalState } from '@/hooks/common-hooks';
 
 import { useSelectLlmOptionsByModelType } from '@/hooks/llm-hooks';
@@ -47,7 +47,15 @@ const HiddenFields = ['email', 'picture', 'audio'];
 
 export function useSelectChunkMethodList() {
   const parserList = useSelectParserList();
-  return parserList.filter((x) => x.value === 'naive');
+  const enabledChunkMethods = [
+    DocumentParserType.Naive,
+    DocumentParserType.Qa,
+    DocumentParserType.Manual,
+  ];
+
+  return parserList.filter((x) =>
+    enabledChunkMethods.includes(x.value as DocumentParserType),
+  );
   // return parserList.filter((x) => !HiddenFields.some((y) => y === x.value));
 }
 

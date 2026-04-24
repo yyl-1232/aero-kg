@@ -1,15 +1,36 @@
 import { IModalManagerChildrenProps } from '@/components/modal-manager';
-import { Form, Input, Modal } from 'antd';
+import { ButtonLoading } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+import { z } from 'zod';
 
-type FieldType = {
-  name?: string;
-  description?: string;
+const FormId = 'knowledge-graph-creating-form';
+
+type FormValues = {
+  name: string;
 };
 
 interface IProps extends Omit<IModalManagerChildrenProps, 'showModal'> {
   loading: boolean;
-  onOk: (name: string, description: string) => void;
+  onOk: (name: string) => void;
 }
 
 const KnowledgeGraphCreatingModal = ({
@@ -18,55 +39,78 @@ const KnowledgeGraphCreatingModal = ({
   loading,
   onOk,
 }: IProps) => {
-  const [form] = Form.useForm();
-
   const { t } = useTranslation('translation', {
     keyPrefix: 'knowledgeGraphList',
   });
 
-  const handleOk = async () => {
-    const ret = await form.validateFields();
-    onOk(ret.name, ret.description);
-  };
+  const FormSchema = z.object({
+    name: z
+      .string()
+      .min(1, {
+        message: t('namePlaceholder'),
+      })
+      .trim(),
+  });
 
-  const handleKeyDown = async (e) => {
-    if (e.key === 'Enter') {
-      await handleOk();
+  const form = useForm<FormValues>({
+    resolver: zodResolver(FormSchema),
+    defaultValues: {
+      name: '',
+    },
+  });
+
+  useEffect(() => {
+    if (!visible) {
+      form.reset();
     }
+  }, [form, visible]);
+
+  const handleSubmit = (values: FormValues) => {
+    onOk(values.name);
   };
 
   return (
-    <Modal
-      title={t('createKnowledgeGraph')}
+    <Dialog
       open={visible}
-      onOk={handleOk}
-      onCancel={hideModal}
-      okButtonProps={{ loading }}
+      onOpenChange={(open) => {
+        if (!open) {
+          hideModal();
+          form.reset();
+        }
+      }}
     >
-      <Form
-        name="Create"
-        labelCol={{ span: 4 }}
-        wrapperCol={{ span: 20 }}
-        style={{ maxWidth: 600 }}
-        autoComplete="off"
-        form={form}
-      >
-        <Form.Item<FieldType>
-          label={t('name')}
-          name="name"
-          rules={[{ required: true, message: t('namePlaceholder') }]}
-        >
-          <Input placeholder={t('namePlaceholder')} onKeyDown={handleKeyDown} />
-        </Form.Item>
-        <Form.Item<FieldType> label={t('description')} name="description">
-          <Input.TextArea
-            placeholder={t('descriptionPlaceholder')}
-            rows={4}
-            onKeyDown={handleKeyDown}
-          />
-        </Form.Item>
-      </Form>
-    </Modal>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>{t('createKnowledgeGraph')}</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form
+            onSubmit={form.handleSubmit(handleSubmit)}
+            className="space-y-6"
+            id={FormId}
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('name')}</FormLabel>
+                  <FormControl>
+                    <Input placeholder={t('namePlaceholder')} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </form>
+        </Form>
+        <DialogFooter>
+          <ButtonLoading type="submit" form={FormId} loading={loading}>
+            {t('createKnowledgeGraph')}
+          </ButtonLoading>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

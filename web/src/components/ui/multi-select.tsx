@@ -43,6 +43,13 @@ export type MultiSelectGroupOptionType = {
   options: MultiSelectOptionType[];
 };
 
+function areSelectedValuesEqual(left: string[], right: string[]) {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
 function MultiCommandItem({
   option,
   isSelected,
@@ -122,7 +129,8 @@ const multiSelectVariants = cva(
  * Props for MultiSelect component
  */
 interface MultiSelectProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof multiSelectVariants> {
   /**
    * An array of option objects to be displayed in the multi-select component.
@@ -209,16 +217,22 @@ export const MultiSelect = React.forwardRef<
     const [isAnimating, setIsAnimating] = React.useState(false);
 
     React.useEffect(() => {
-      if (!selectedValues?.length && props.value) {
-        setSelectedValues(props.value as string[]);
+      if (props.value === undefined) {
+        return;
+      }
+
+      const nextValues = (props.value as string[]) ?? [];
+
+      if (!areSelectedValuesEqual(selectedValues, nextValues)) {
+        setSelectedValues(nextValues);
       }
     }, [props.value, selectedValues]);
 
     React.useEffect(() => {
-      if (!selectedValues?.length && !props.value && defaultValue) {
+      if (props.value === undefined) {
         setSelectedValues(defaultValue);
       }
-    }, [defaultValue, props.value, selectedValues]);
+    }, [defaultValue, props.value]);
 
     const flatOptions = React.useMemo(() => {
       return options.flatMap((option) =>
@@ -280,10 +294,12 @@ export const MultiSelect = React.forwardRef<
         <PopoverTrigger asChild>
           <Button
             ref={ref}
+            type="button"
+            variant="outline"
             {...props}
             onClick={handleTogglePopover}
             className={cn(
-              'flex w-full p-1 rounded-md border min-h-10 h-auto items-center justify-between bg-inherit hover:bg-inherit [&_svg]:pointer-events-auto',
+              'flex w-full p-1 rounded-md border border-input min-h-10 h-auto items-center justify-between bg-bg-input text-text-primary hover:bg-bg-input [&_svg]:pointer-events-auto',
               className,
             )}
           >

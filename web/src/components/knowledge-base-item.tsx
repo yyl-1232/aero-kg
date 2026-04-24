@@ -137,13 +137,15 @@ export function KnowledgeBaseFormField({
           <FormLabel>{t('chat.knowledgeBases')}</FormLabel>
           <FormControl>
             <MultiSelect
+              {...field}
+              type="button"
               options={options}
               onValueChange={field.onChange}
               placeholder={t('chat.knowledgeBasesMessage')}
-              variant="inverted"
+              className="w-full border border-input bg-bg-input text-text-primary hover:bg-bg-input"
               maxCount={100}
-              defaultValue={field.value}
-              {...field}
+              modalPopover
+              defaultValue={field.value ?? []}
             />
           </FormControl>
         </FormItem>

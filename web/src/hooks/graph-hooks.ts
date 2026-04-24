@@ -66,13 +66,15 @@ export const useCreateKnowledgeGraph = () => {
     mutateAsync,
   } = useMutation({
     mutationKey: ['createKnowledgeGraph'],
-    mutationFn: async (params: { name: string; description: string }) => {
+    mutationFn: async (params: { name: string; description?: string }) => {
       const { data = {} } = await graphService.createGraph(params);
       if (data.code === 0) {
-        message.success(i18n.t(`message.created`));
-        // 关键：刷新列表查询
+        message.success(i18n.t('message.created'));
         queryClient.invalidateQueries({
           queryKey: ['infiniteFetchKnowledgeGraphList'],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ['fetchKnowledgeGraphList'],
         });
       }
       return data;
@@ -81,6 +83,7 @@ export const useCreateKnowledgeGraph = () => {
 
   return { data, loading, createKnowledgeGraph: mutateAsync };
 };
+
 export const useDeleteKnowledgeGraph = () => {
   const queryClient = useQueryClient();
 
@@ -95,15 +98,17 @@ export const useDeleteKnowledgeGraph = () => {
         throw new Error('Graph ID is required');
       }
 
-      // 使用独立的 deleteGraph 函数
       const { data } = await deleteGraph(graphId);
       if (data.code === 0) {
         message.success(i18n.t('message.deleted'));
         queryClient.invalidateQueries({
           queryKey: ['infiniteFetchKnowledgeGraphList'],
         });
+        queryClient.invalidateQueries({
+          queryKey: ['fetchKnowledgeGraphList'],
+        });
       } else {
-        message.error(data.message || '删除失败');
+        message.error(data.message || 'Delete failed');
       }
       return data?.data ?? [];
     },

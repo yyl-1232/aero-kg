@@ -3,6 +3,7 @@ import { useTranslate } from '@/hooks/common-hooks';
 import {
   useFetchConversationList,
   useFetchDialogList,
+  useGetChatSearchParams,
 } from '@/hooks/use-chat-request';
 import { IConversation } from '@/interfaces/database/chat';
 import { getConversationId } from '@/utils/chat';
@@ -51,40 +52,68 @@ export const useSelectDerivedConversationList = () => {
   } = useFetchConversationList();
   const { id: dialogId } = useParams();
   const { setNewConversationRouteParams } = useSetNewConversationRouteParams();
+  const { conversationId, isNew } = useGetChatSearchParams();
   const prologue = useFindPrologueFromDialogList();
 
-  const addTemporaryConversation = useCallback(() => {
-    const conversationId = getConversationId();
-    setList((pre) => {
-      if (dialogId) {
-        setNewConversationRouteParams(conversationId, 'true');
-        const nextList = [
-          {
-            id: conversationId,
-            name: t('newConversation'),
-            dialog_id: dialogId,
-            is_new: true,
-            message: [
+  const buildTemporaryConversation = useCallback(
+    (conversationId: string) =>
+      ({
+        id: conversationId,
+        name: t('newConversation'),
+        dialog_id: dialogId,
+        is_new: true,
+        message: prologue
+          ? [
               {
                 content: prologue,
                 role: MessageType.Assistant,
               },
-            ],
-          } as any,
-          ...conversationList,
-        ];
-        return nextList;
-      }
+            ]
+          : [],
+      }) as IConversation,
+    [dialogId, prologue, t],
+  );
 
-      return pre;
-    });
-  }, [conversationList, dialogId, prologue, t, setNewConversationRouteParams]);
+  const addTemporaryConversation = useCallback(() => {
+    const conversationId = getConversationId();
+    if (!dialogId) {
+      return;
+    }
 
-  // When you first enter the page, select the top conversation card
+    const temporaryConversation = buildTemporaryConversation(conversationId);
+    setNewConversationRouteParams(conversationId, 'true');
+    setList([temporaryConversation, ...conversationList]);
+  }, [
+    buildTemporaryConversation,
+    conversationList,
+    dialogId,
+    setNewConversationRouteParams,
+  ]);
 
   useEffect(() => {
+    if (isNew === 'true' && conversationId) {
+      const hasCurrentConversation = conversationList.some(
+        (item) => item.id === conversationId,
+      );
+
+      setList(
+        hasCurrentConversation
+          ? [...conversationList]
+          : [buildTemporaryConversation(conversationId), ...conversationList],
+      );
+      return;
+    }
+
     setList([...conversationList]);
-  }, [conversationList]);
+  }, [buildTemporaryConversation, conversationId, conversationList, isNew]);
+
+  useEffect(() => {
+    if (!dialogId || conversationId) {
+      return;
+    }
+
+    addTemporaryConversation();
+  }, [addTemporaryConversation, conversationId, dialogId]);
 
   return {
     list,

@@ -235,7 +235,6 @@ export const useClickConversationCard = () => {
 
 export const useFetchConversationList = () => {
   const { id } = useParams();
-  const { handleClickConversation } = useClickConversationCard();
 
   const { searchString, handleInputChange } = useHandleSearchStrChange();
 
@@ -259,13 +258,6 @@ export const useFetchConversationList = () => {
         { params: { dialog_id: id } },
         true,
       );
-      if (data.code === 0) {
-        if (data.data.length > 0) {
-          handleClickConversation(data.data[0].id, '');
-        } else {
-          handleClickConversation('', '');
-        }
-      }
       return data?.data;
     },
   });

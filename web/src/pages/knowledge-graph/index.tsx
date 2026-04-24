@@ -1,8 +1,9 @@
 import ListFilterBar from '@/components/list-filter-bar';
+import { Button } from '@/components/ui/button';
 import { useInfiniteFetchKnowledgeGraphList } from '@/hooks/graph-hooks';
-import { useFetchUserInfo } from '@/hooks/user-setting-hooks';
-import { Button, Divider, Empty, Flex, Skeleton, Spin } from 'antd';
-import { Plus } from 'lucide-react';
+import { IKnowledgeGraph } from '@/hooks/use-knowledge-graph-request';
+import { Empty, Skeleton, Spin } from 'antd';
+import { GitGraph, Plus } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import InfiniteScroll from 'react-infinite-scroll-component';
@@ -12,10 +13,7 @@ import KnowledgeGraphCard from './knowledge-graph-card';
 import KnowledgeGraphCreatingModal from './knowledge-graph-creating-modal';
 
 export default function KnowledgeGraphPage() {
-  const { data: userInfo } = useFetchUserInfo();
-  const { t } = useTranslation('translation', {
-    keyPrefix: 'knowledgeGraphList',
-  });
+  const { t } = useTranslation();
 
   const {
     visible,
@@ -34,84 +32,56 @@ export default function KnowledgeGraphPage() {
     loading,
   } = useInfiniteFetchKnowledgeGraphList();
 
-  const nextList = useMemo(() => {
-    const list =
-      data?.pages?.flatMap((x) => (Array.isArray(x.graphs) ? x.graphs : [])) ??
-      [];
-    return list;
+  const nextList = useMemo<IKnowledgeGraph[]>(() => {
+    return (
+      data?.pages?.flatMap((page) =>
+        Array.isArray(page.graphs) ? (page.graphs as IKnowledgeGraph[]) : [],
+      ) ?? []
+    );
   }, [data?.pages]);
-
-  const total = useMemo(() => {
-    return data?.pages.at(-1).total ?? 0;
-  }, [data?.pages]);
-
-  const leftPanel = <div className="text-2xl font-semibold">知识图谱</div>;
 
   return (
-    <section className="flex h-full flex-col w-full">
+    <section className="py-4 flex-1 flex flex-col">
       <Helmet>
-        <title>{'AeroKG'}</title>
+        <title>AeroKG</title>
       </Helmet>
 
-      <div className="p-8">
-        <ListFilterBar
-          icon="data"
-          leftPanel={leftPanel}
-          searchString={searchString}
-          onSearchChange={handleInputChange}
-          showFilter={false}
-        >
-          <Button
-            type="primary"
-            onClick={showModal}
-            className="h-8 px-5 text-sm flex items-center"
-          >
-            <Plus className="mr-1 size-3.5 flex-shrink-0" />
-            <span className="whitespace-nowrap">
-              {t('createKnowledgeGraph')}
-            </span>
-          </Button>
-        </ListFilterBar>
-      </div>
+      <ListFilterBar
+        title={t('header.knowledgeGraph')}
+        searchString={searchString}
+        onSearchChange={handleInputChange}
+        showFilter={false}
+        className="px-8"
+        icon={<GitGraph className="size-6" />}
+      >
+        <Button onClick={showModal}>
+          <Plus className="size-2.5" />
+          {t('knowledgeGraphList.createKnowledgeGraph')}
+        </Button>
+      </ListFilterBar>
 
-      <Spin spinning={loading}>
+      <Spin spinning={loading} className="flex-1">
         <div
           id="scrollableDiv"
-          style={{
-            height: 'calc(100vh - 250px)',
-            overflow: 'auto',
-            padding: '0 16px',
-          }}
+          className="flex-1 overflow-auto px-8 max-h-[78vh]"
         >
           <InfiniteScroll
-            dataLength={nextList?.length ?? 0}
+            dataLength={nextList.length}
             next={fetchNextPage}
             hasMore={hasNextPage}
             loader={<Skeleton avatar paragraph={{ rows: 1 }} active />}
-            endMessage={
-              !!total && <Divider plain>{t('noMoreData')} 🤐</Divider>
-            }
             scrollableTarget="scrollableDiv"
             scrollThreshold="200px"
           >
-            <Flex
-              gap={'large'}
-              wrap="wrap"
-              className="knowledge-graph-card-container"
-            >
-              {nextList?.length > 0 ? (
-                nextList.map((item: any, index: number) => {
-                  return (
-                    <KnowledgeGraphCard
-                      item={item}
-                      key={`${item?.name}-${index}`}
-                    />
-                  );
-                })
-              ) : (
-                <Empty className="knowledge-graph-empty" />
-              )}
-            </Flex>
+            {nextList.length > 0 ? (
+              <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 pb-4">
+                {nextList.map((item) => (
+                  <KnowledgeGraphCard item={item} key={item.id} />
+                ))}
+              </div>
+            ) : (
+              <Empty className="knowledge-graph-empty" />
+            )}
           </InfiniteScroll>
         </div>
       </Spin>

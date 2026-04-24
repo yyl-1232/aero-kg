@@ -1,5 +1,3 @@
-import EmbedDialog from '@/components/embed-dialog';
-import { useShowEmbedModal } from '@/components/embed-dialog/use-show-embed-dialog';
 import { PageHeader } from '@/components/page-header';
 import {
   Breadcrumb,
@@ -11,7 +9,6 @@ import {
 } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { SharedFrom } from '@/constants/chat';
 import { useSetModalState } from '@/hooks/common-hooks';
 import { useNavigatePage } from '@/hooks/logic-hooks/navigate-hooks';
 import {
@@ -21,9 +18,9 @@ import {
 } from '@/hooks/use-chat-request';
 import { cn } from '@/lib/utils';
 import { isEmpty } from 'lodash';
-import { ArrowUpRight, LogOut, Send } from 'lucide-react';
+import { ArrowUpRight, LogOut } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'umi';
 import { useHandleClickConversationCard } from '../hooks/use-click-card';
 import { ChatSettings } from './app-settings/chat-settings';
 import { MultipleChatBox } from './chat-box/multiple-chat-box';
@@ -32,17 +29,23 @@ import { Sessions } from './sessions';
 import { useAddChatBox } from './use-add-box';
 import { useSwitchDebugMode } from './use-switch-debug-mode';
 
+const chatSettingsVisitedStorageKeyPrefix = 'chat-settings-visited:';
+
 export default function Chat() {
-  const { id } = useParams();
   const { navigateToChatList } = useNavigatePage();
   const { data } = useFetchDialog();
   const { t } = useTranslation();
   const { data: conversation } = useFetchConversation();
+  const initializedDialogIdRef = useRef<string>('');
 
   const { handleConversationCardClick, controller } =
     useHandleClickConversationCard();
-  const { visible: settingVisible, switchVisible: switchSettingVisible } =
-    useSetModalState(true);
+  const {
+    visible: settingVisible,
+    switchVisible: switchSettingVisible,
+    showModal: showChatSettings,
+    hideModal: hideChatSettings,
+  } = useSetModalState(false);
   const {
     removeChatBox,
     addChatBox,
@@ -51,12 +54,46 @@ export default function Chat() {
     hasThreeChatBox,
   } = useAddChatBox();
 
-  const { showEmbedModal, hideEmbedModal, embedVisible, beta } =
-    useShowEmbedModal();
-
   const { conversationId, isNew } = useGetChatSearchParams();
 
   const { isDebugMode, switchDebugMode } = useSwitchDebugMode();
+
+  useEffect(() => {
+    if (!data.id || initializedDialogIdRef.current === data.id) {
+      return;
+    }
+
+    initializedDialogIdRef.current = data.id;
+
+    const isChatConfigured =
+      (data.kb_ids?.length ?? 0) > 0 ||
+      (data.prompt_config?.kg_ids?.length ?? 0) > 0;
+
+    try {
+      const storageKey = `${chatSettingsVisitedStorageKeyPrefix}${data.id}`;
+      const hasVisited = window.localStorage.getItem(storageKey) === '1';
+
+      window.localStorage.setItem(storageKey, '1');
+
+      if (!hasVisited && !isChatConfigured) {
+        showChatSettings();
+      } else {
+        hideChatSettings();
+      }
+    } catch {
+      if (!isChatConfigured) {
+        showChatSettings();
+      } else {
+        hideChatSettings();
+      }
+    }
+  }, [
+    data.id,
+    data.kb_ids,
+    data.prompt_config?.kg_ids,
+    hideChatSettings,
+    showChatSettings,
+  ]);
 
   if (isDebugMode) {
     return (
@@ -95,10 +132,6 @@ export default function Chat() {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
-        <Button onClick={showEmbedModal}>
-          <Send />
-          {t('common.embedIntoSite')}
-        </Button>
       </PageHeader>
       <div className="flex flex-1 min-h-0 pb-9">
         <Sessions
@@ -132,24 +165,13 @@ export default function Chat() {
                 <SingleChatBox controller={controller}></SingleChatBox>
               </CardContent>
             </Card>
-            {settingVisible && (
-              <ChatSettings
-                switchSettingVisible={switchSettingVisible}
-              ></ChatSettings>
-            )}
+            <ChatSettings
+              switchSettingVisible={switchSettingVisible}
+              visible={settingVisible}
+            ></ChatSettings>
           </CardContent>
         </Card>
       </div>
-      {embedVisible && (
-        <EmbedDialog
-          visible={embedVisible}
-          hideModal={hideEmbedModal}
-          token={id!}
-          from={SharedFrom.Chat}
-          beta={beta}
-          isAgent={false}
-        ></EmbedDialog>
-      )}
     </section>
   );
 }
