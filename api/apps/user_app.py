@@ -38,6 +38,7 @@ from api.utils import (
     decrypt,
     download_img,
     get_format_time,
+    get_base_config,
     get_uuid,
 )
 from api.utils.api_utils import (
@@ -726,7 +727,29 @@ def user_add():
             code=settings.RetCode.EXCEPTION_ERROR,
         )
 
-redis_client = Redis(host='localhost', port=6379, db=1, password='infini_rag_flow',decode_responses=True)
+def _build_redis_client():
+    redis_conf = get_base_config("redis", {}) or {}
+    host_conf = str(redis_conf.get("host", "redis:6379"))
+
+    if ":" in host_conf:
+        redis_host, redis_port = host_conf.rsplit(":", 1)
+    else:
+        redis_host = host_conf
+        redis_port = 6379
+
+    redis_db = int(redis_conf.get("db", 1))
+    redis_password = redis_conf.get("password", None)
+
+    return Redis(
+        host=redis_host,
+        port=int(redis_port),
+        db=redis_db,
+        password=redis_password,
+        decode_responses=True,
+    )
+
+
+redis_client = _build_redis_client()
 # 找回密码
 @manager.route("/requestVerificationCode", methods=["POST"])
 @validate_request("email", "nickname")
