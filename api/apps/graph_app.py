@@ -78,6 +78,72 @@ def list_graphs():
     return get_json_result(data={"graphs": graph_list, "total": len(graph_list)})
 
 
+@manager.route('/update', methods=['post'])
+@login_required
+@validate_request("graph_id", "name")
+def update_graph():
+    req = request.json
+    graph_id = req["graph_id"]
+    graph_name = req["name"]
+
+    if not isinstance(graph_name, str):
+        return get_data_error_result(message="Graph name must be string.")
+
+    graph_name = graph_name.strip()
+    if graph_name == "":
+        return get_data_error_result(message="Graph name can't be empty.")
+
+    if len(graph_name) > DATASET_NAME_LIMIT:
+        return get_data_error_result(
+            message=f"Graph name length is {len(graph_name)} which is larger than {DATASET_NAME_LIMIT}"
+        )
+
+    graphs = KnowledgeGraphService.query(
+        id=graph_id,
+        tenant_id=current_user.id,
+        status="1"
+    )
+    if not graphs or len(graphs) == 0:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    duplicate_graphs = KnowledgeGraphService.query(
+        name=graph_name,
+        tenant_id=current_user.id,
+        status="1"
+    )
+    if any(graph.id != graph_id for graph in duplicate_graphs):
+        return get_data_error_result(message="Duplicated graph name.")
+
+    graph = graphs[0]
+    old_name = graph.name
+    update_data = {
+        "name": graph_name,
+        "description": req.get("description", graph.description),
+        "update_time": current_timestamp(),
+    }
+
+    if not KnowledgeGraphService.update_by_id(graph_id, update_data):
+        return get_data_error_result(message="Update graph error")
+
+    if old_name != graph_name:
+        root_folder = FileService.get_root_folder(current_user.id)
+        kg_folder = FileService.query(
+            name=".knowledgegraph",
+            parent_id=root_folder["id"],
+            tenant_id=current_user.id
+        )
+        if kg_folder:
+            graph_folder = FileService.query(
+                name=old_name,
+                parent_id=kg_folder[0].id,
+                tenant_id=current_user.id
+            )
+            if graph_folder:
+                FileService.update_by_id(graph_folder[0].id, {"name": graph_name})
+
+    return get_json_result(data=True)
+
+
 @manager.route('/<graph_id>/delete', methods=['DELETE'])
 @login_required
 def delete_graph(graph_id):

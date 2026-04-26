@@ -17,6 +17,7 @@ import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'umi';
 import { z } from 'zod';
+import { chatSettingsSavedStorageKeyPrefix } from '../chat-settings-storage';
 import ChatBasicSetting from './chat-basic-settings';
 import { ChatModelSettings } from './chat-model-settings';
 import { ChatPromptEngine } from './chat-prompt-engine';
@@ -89,12 +90,21 @@ export function ChatSettings({
       Array.isArray(icon) && icon.length > 0
         ? await transformFile2Base64(icon[0])
         : '';
-    setDialog({
+    const code = await setDialog({
       ...omit(data, 'operator_permission'),
       ...nextValues,
       icon: avatar,
       dialog_id: id,
     });
+
+    if (code === 0 && id) {
+      try {
+        window.localStorage.setItem(
+          `${chatSettingsSavedStorageKeyPrefix}${id}`,
+          '1',
+        );
+      } catch {}
+    }
   }
 
   function onInvalid(errors: any) {

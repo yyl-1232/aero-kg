@@ -117,6 +117,42 @@ export const useDeleteKnowledgeGraph = () => {
   return { data, loading, deleteKnowledgeGraph: mutateAsync };
 };
 
+export const useRenameKnowledgeGraph = () => {
+  const queryClient = useQueryClient();
+
+  const {
+    data,
+    isPending: loading,
+    mutateAsync,
+  } = useMutation({
+    mutationKey: ['renameKnowledgeGraph'],
+    mutationFn: async (params: {
+      graph_id: string;
+      name: string;
+      description?: string;
+    }) => {
+      const { data = {} } = await graphService.updateGraph(params);
+      if (data.code === 0) {
+        message.success(i18n.t('message.renamed'));
+        queryClient.invalidateQueries({
+          queryKey: ['infiniteFetchKnowledgeGraphList'],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ['fetchKnowledgeGraphList'],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ['fetchKnowledgeGraphDetail', params.graph_id],
+        });
+      } else {
+        message.error(data.message || 'Rename failed');
+      }
+      return data;
+    },
+  });
+
+  return { data, loading, renameKnowledgeGraph: mutateAsync };
+};
+
 export const useFetchKnowledgeGraphDetail = (graphId: string) => {
   const { data, isFetching: loading } = useQuery({
     queryKey: ['fetchKnowledgeGraphDetail', graphId],

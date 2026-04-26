@@ -23,7 +23,6 @@ from datetime import datetime
 from flask import redirect, request, session
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
-from redis import Redis
 from api import settings
 from api.apps.auth import get_auth_client
 from api.db import FileType, UserTenantRole
@@ -38,7 +37,6 @@ from api.utils import (
     decrypt,
     download_img,
     get_format_time,
-    get_base_config,
     get_uuid,
 )
 from api.utils.api_utils import (
@@ -48,6 +46,7 @@ from api.utils.api_utils import (
     server_error_response,
     validate_request,
 )
+from rag.utils.redis_conn import REDIS_CONN
 
 
 @manager.route("/login", methods=["POST", "GET"])  # noqa: F821
@@ -727,29 +726,6 @@ def user_add():
             code=settings.RetCode.EXCEPTION_ERROR,
         )
 
-def _build_redis_client():
-    redis_conf = get_base_config("redis", {}) or {}
-    host_conf = str(redis_conf.get("host", "redis:6379"))
-
-    if ":" in host_conf:
-        redis_host, redis_port = host_conf.rsplit(":", 1)
-    else:
-        redis_host = host_conf
-        redis_port = 6379
-
-    redis_db = int(redis_conf.get("db", 1))
-    redis_password = redis_conf.get("password", None)
-
-    return Redis(
-        host=redis_host,
-        port=int(redis_port),
-        db=redis_db,
-        password=redis_password,
-        decode_responses=True,
-    )
-
-
-redis_client = _build_redis_client()
 # 找回密码
 @manager.route("/requestVerificationCode", methods=["POST"])
 @validate_request("email", "nickname")
@@ -789,7 +765,13 @@ def request_verification_code():
 
     # 4. 存入 Redis，5 分钟过期
     redis_key = f"reset_pwd:{email}"
-    redis_client.set(redis_key, verification_code, ex=300)  # 300秒 = 5分钟
+    redis_set_ok = REDIS_CONN.set(redis_key, verification_code, exp=300)  # 300秒 = 5分钟
+    if not redis_set_ok:
+        return get_json_result(
+            data=False,
+            message="Redis unavailable, please check Redis service status.",
+            code=settings.RetCode.EXCEPTION_ERROR,
+        )
 
     # 5. TODO: 可在这里通过邮件/短信发送验证码
     logging.info(f"Verification code for {email}: {verification_code}")
@@ -832,7 +814,7 @@ def reset_password():
 
     # 从 Redis 获取验证码
     redis_key = f"reset_pwd:{email}"
-    stored_code = redis_client.get(redis_key)
+    stored_code = REDIS_CONN.get(redis_key)
     if not stored_code or stored_code != code:
         return get_json_result(
             data=False,
@@ -849,7 +831,7 @@ def reset_password():
         UserService.update_by_id(user.id, user_dict)
 
         # 删除 Redis 中的验证码，避免重复使用
-        redis_client.delete(redis_key)
+        REDIS_CONN.delete(redis_key)
 
         return get_json_result(
             data=True,
