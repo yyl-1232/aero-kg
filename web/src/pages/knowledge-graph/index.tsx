@@ -1,8 +1,9 @@
 import ListFilterBar from '@/components/list-filter-bar';
+import { RenameDialog } from '@/components/rename-dialog';
 import { Button } from '@/components/ui/button';
 import { useInfiniteFetchKnowledgeGraphList } from '@/hooks/graph-hooks';
 import { IKnowledgeGraph } from '@/hooks/use-knowledge-graph-request';
-import { Empty, Skeleton, Spin } from 'antd';
+import { Skeleton, Spin } from 'antd';
 import { GitGraph, Plus } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +12,7 @@ import { Helmet } from 'umi';
 import { useSaveKnowledgeGraph } from './hooks';
 import KnowledgeGraphCard from './knowledge-graph-card';
 import KnowledgeGraphCreatingModal from './knowledge-graph-creating-modal';
+import { useRenameKnowledgeGraphModal } from './use-rename-knowledge-graph';
 
 export default function KnowledgeGraphPage() {
   const { t } = useTranslation();
@@ -31,6 +33,15 @@ export default function KnowledgeGraphPage() {
     handleInputChange,
     loading,
   } = useInfiniteFetchKnowledgeGraphList();
+
+  const {
+    graphRenameLoading,
+    initialGraphName,
+    onGraphRenameOk,
+    graphRenameVisible,
+    hideGraphRenameModal,
+    showGraphRenameModal,
+  } = useRenameKnowledgeGraphModal();
 
   const nextList = useMemo<IKnowledgeGraph[]>(() => {
     return (
@@ -76,11 +87,15 @@ export default function KnowledgeGraphPage() {
             {nextList.length > 0 ? (
               <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 pb-4">
                 {nextList.map((item) => (
-                  <KnowledgeGraphCard item={item} key={item.id} />
+                  <KnowledgeGraphCard
+                    item={item}
+                    key={item.id}
+                    showGraphRenameModal={showGraphRenameModal}
+                  />
                 ))}
               </div>
             ) : (
-              <Empty className="knowledge-graph-empty" />
+              <div />
             )}
           </InfiniteScroll>
         </div>
@@ -92,6 +107,14 @@ export default function KnowledgeGraphPage() {
         hideModal={hideModal}
         onOk={onCreateOk}
       />
+      {graphRenameVisible && (
+        <RenameDialog
+          hideModal={hideGraphRenameModal}
+          onOk={onGraphRenameOk}
+          initialName={initialGraphName}
+          loading={graphRenameLoading}
+        />
+      )}
     </section>
   );
 }

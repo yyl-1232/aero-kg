@@ -25,11 +25,10 @@ import { useHandleClickConversationCard } from '../hooks/use-click-card';
 import { ChatSettings } from './app-settings/chat-settings';
 import { MultipleChatBox } from './chat-box/multiple-chat-box';
 import { SingleChatBox } from './chat-box/single-chat-box';
+import { chatSettingsSavedStorageKeyPrefix } from './chat-settings-storage';
 import { Sessions } from './sessions';
 import { useAddChatBox } from './use-add-box';
 import { useSwitchDebugMode } from './use-switch-debug-mode';
-
-const chatSettingsVisitedStorageKeyPrefix = 'chat-settings-visited:';
 
 export default function Chat() {
   const { navigateToChatList } = useNavigatePage();
@@ -65,35 +64,19 @@ export default function Chat() {
 
     initializedDialogIdRef.current = data.id;
 
-    const isChatConfigured =
-      (data.kb_ids?.length ?? 0) > 0 ||
-      (data.prompt_config?.kg_ids?.length ?? 0) > 0;
-
     try {
-      const storageKey = `${chatSettingsVisitedStorageKeyPrefix}${data.id}`;
-      const hasVisited = window.localStorage.getItem(storageKey) === '1';
+      const storageKey = `${chatSettingsSavedStorageKeyPrefix}${data.id}`;
+      const hasSavedSettings = window.localStorage.getItem(storageKey) === '1';
 
-      window.localStorage.setItem(storageKey, '1');
-
-      if (!hasVisited && !isChatConfigured) {
-        showChatSettings();
-      } else {
+      if (hasSavedSettings) {
         hideChatSettings();
+      } else {
+        showChatSettings();
       }
     } catch {
-      if (!isChatConfigured) {
-        showChatSettings();
-      } else {
-        hideChatSettings();
-      }
+      showChatSettings();
     }
-  }, [
-    data.id,
-    data.kb_ids,
-    data.prompt_config?.kg_ids,
-    hideChatSettings,
-    showChatSettings,
-  ]);
+  }, [data.id, hideChatSettings, showChatSettings]);
 
   if (isDebugMode) {
     return (

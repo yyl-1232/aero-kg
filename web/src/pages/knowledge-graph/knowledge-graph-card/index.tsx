@@ -8,12 +8,16 @@ import { formatDate } from '@/utils/date';
 import { NodeIndexOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { MouseEventHandler } from 'react';
 import { KnowledgeGraphDropdown } from '../knowledge-graph-dropdown';
+import { useRenameKnowledgeGraphModal } from '../use-rename-knowledge-graph';
 
-interface IProps {
+type IProps = {
   item: IKnowledgeGraph;
-}
+} & Pick<
+  ReturnType<typeof useRenameKnowledgeGraphModal>,
+  'showGraphRenameModal'
+>;
 
-const KnowledgeGraphCard = ({ item }: IProps) => {
+const KnowledgeGraphCard = ({ item, showGraphRenameModal }: IProps) => {
   const { navigateToKnowledgeGraph } = useNavigatePage();
 
   const stopPropagation: MouseEventHandler<HTMLButtonElement> = (e) => {
@@ -35,7 +39,10 @@ const KnowledgeGraphCard = ({ item }: IProps) => {
             <div className="text-[20px] font-bold leading-5 truncate">
               {item.name}
             </div>
-            <KnowledgeGraphDropdown graph={item}>
+            <KnowledgeGraphDropdown
+              graph={item}
+              showGraphRenameModal={showGraphRenameModal}
+            >
               <MoreButton onClick={stopPropagation} />
             </KnowledgeGraphDropdown>
           </section>
