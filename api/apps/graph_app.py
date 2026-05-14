@@ -1,5 +1,6 @@
 ﻿import time
 
+from api import settings
 from flask import Blueprint
 from flask_login import login_required, current_user
 from flask import current_app, request
@@ -7,6 +8,7 @@ from flask import current_app, request
 from api.db.services.document_service import DocumentService
 from api.db.services.file_service import FileService
 from api.utils.api_utils import server_error_response, get_data_error_result, validate_request, get_json_result, \
+    send_file_in_mem, \
     token_required
 from api.utils import get_uuid
 from api.db import StatusEnum, FileType, FileSource, TenantPermission
@@ -41,6 +43,200 @@ def _get_readable_graph(graph_id):
         )
     )
     return graphs[0] if graphs else None
+
+
+def _get_writable_graph(graph_id):
+    graphs = KnowledgeGraphService.query(
+        id=graph_id,
+        tenant_id=current_user.id,
+        status="1"
+    )
+    return graphs[0] if graphs else None
+
+
+def _sync_graph_counts(graph_id):
+    graph_data = Neo4jKnowledgeGraphService.read_graph(graph_id)
+    KnowledgeGraphService.update_by_id(graph_id, {
+        "node_num": len(graph_data.get("nodes", [])),
+        "edge_num": len(graph_data.get("edges", [])),
+        "update_time": current_timestamp(),
+    })
+    graph = KnowledgeGraphService.get_by_id(graph_id)
+    if graph and graph[1]:
+        _sync_latest_graph_file(graph[1], graph_data)
+    return graph_data
+
+
+def _get_json_payload():
+    req = request.json or {}
+    if isinstance(req.get("data"), dict):
+        return req["data"]
+    return req
+
+
+def _missing_required_payload(payload, *fields):
+    return [field for field in fields if field not in payload]
+
+
+def _missing_argument_result(missing_fields):
+    return get_json_result(
+        code=settings.RetCode.ARGUMENT_ERROR,
+        message="required argument are missing: {}; ".format(
+            ",".join(missing_fields)
+        ),
+    )
+
+
+def _get_or_create_graph_folder(graph):
+    root_folder = FileService.get_root_folder(graph.tenant_id)
+    kg_folder = FileService.query(
+        name=".knowledgegraph",
+        parent_id=root_folder["id"],
+        tenant_id=graph.tenant_id
+    )
+    if not kg_folder:
+        kg_folder = FileService.insert({
+            "id": get_uuid(),
+            "parent_id": root_folder["id"],
+            "tenant_id": graph.tenant_id,
+            "created_by": graph.created_by,
+            "name": ".knowledgegraph",
+            "location": "",
+            "size": 0,
+            "type": FileType.FOLDER.value,
+            "source_type": FileSource.KNOWLEDGEGRAPH
+        })
+    else:
+        kg_folder = kg_folder[0]
+
+    graph_folder = FileService.query(
+        name=graph.name,
+        parent_id=kg_folder.id,
+        tenant_id=graph.tenant_id
+    )
+    if not graph_folder:
+        graph_folder = FileService.insert({
+            "id": get_uuid(),
+            "parent_id": kg_folder.id,
+            "tenant_id": graph.tenant_id,
+            "created_by": graph.created_by,
+            "name": graph.name,
+            "location": "",
+            "size": 0,
+            "type": FileType.FOLDER.value,
+            "source_type": FileSource.KNOWLEDGEGRAPH
+        })
+    else:
+        graph_folder = graph_folder[0]
+
+    return graph_folder
+
+
+def _current_graph_export_payload(graph_data):
+    return {
+        "nodes": [
+            {
+                "id": node.get("id"),
+                "entity_kwd": node.get("entity_name", ""),
+                "label": node.get("entity_type") or "Entity",
+                "aliases": node.get("aliases") or [],
+                "description": node.get("description") or "",
+                "source": node.get("source") or [],
+            }
+            for node in graph_data.get("nodes", [])
+        ],
+        "edges": [
+            {
+                "id": edge.get("id"),
+                "head_entity_id": edge.get("source"),
+                "tail_entity_id": edge.get("target"),
+                "relation": edge.get("relation") or "",
+                "description": edge.get("description") or edge.get("relation") or "",
+                "source": edge.get("source_detail") or [],
+            }
+            for edge in graph_data.get("edges", [])
+        ],
+    }
+
+
+def _safe_graph_base_name(name):
+    base_name = (name or "knowledge_graph").strip() or "knowledge_graph"
+    if base_name.lower().endswith(".json"):
+        base_name = base_name[:-5]
+    return "".join(
+        ch if ch not in r'\/:*?"<>|' else "_"
+        for ch in base_name
+    ).strip() or "knowledge_graph"
+
+
+def _original_graph_base_name(graph):
+    for file_id in graph.file_ids or []:
+        ok, file = FileService.get_by_id(file_id)
+        if not ok or not file:
+            continue
+        name = file.name or ""
+        if not name.lower().endswith(".json"):
+            continue
+        if name.lower().endswith("_新.json"):
+            continue
+        return _safe_graph_base_name(name)
+    return _safe_graph_base_name(graph.name)
+
+
+def _sync_latest_graph_file(graph, graph_data=None):
+    import json
+
+    graph_data = graph_data or Neo4jKnowledgeGraphService.read_graph(graph.id)
+    payload = _current_graph_export_payload(graph_data)
+    blob = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    graph_folder = _get_or_create_graph_folder(graph)
+    safe_base_name = _original_graph_base_name(graph)
+    latest_name = f"{safe_base_name}_新.json"
+    latest_location = f"{graph.id}_latest_knowledge_graph.json"
+
+    STORAGE_IMPL.put(graph_folder.id, latest_location, blob)
+
+    latest_files = FileService.query(
+        name=latest_name,
+        parent_id=graph_folder.id,
+        tenant_id=graph.tenant_id
+    )
+    if latest_files:
+        latest_file = latest_files[0]
+        FileService.update_by_id(latest_file.id, {
+            "location": latest_location,
+            "size": len(blob),
+            "type": "json",
+            "source_type": FileSource.KNOWLEDGEGRAPH,
+        })
+        latest_file_id = latest_file.id
+    else:
+        latest_file_id = get_uuid()
+        FileService.insert({
+            "id": latest_file_id,
+            "parent_id": graph_folder.id,
+            "tenant_id": graph.tenant_id,
+            "created_by": graph.created_by,
+            "type": "json",
+            "name": latest_name,
+            "location": latest_location,
+            "size": len(blob),
+            "source_type": FileSource.KNOWLEDGEGRAPH
+        })
+
+    file_ids = graph.file_ids or []
+    if latest_file_id not in file_ids:
+        KnowledgeGraphService.update_by_id(graph.id, {
+            "file_ids": file_ids + [latest_file_id],
+            "size": len(blob),
+            "update_time": current_timestamp(),
+        })
+    else:
+        KnowledgeGraphService.update_by_id(graph.id, {
+            "size": len(blob),
+            "update_time": current_timestamp(),
+        })
+
 
 @manager.route('/create', methods=['post'])
 @login_required
@@ -428,6 +624,26 @@ def get_neo4j_knowledge_graph(graph_id):
         return server_error_response(e)
 
 
+@manager.route('/<graph_id>/knowledge_graph/export', methods=['GET'])
+@login_required
+def export_neo4j_knowledge_graph(graph_id):
+    graph = _get_readable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    try:
+        import json
+        graph_data = Neo4jKnowledgeGraphService.read_graph(graph_id)
+        payload = _current_graph_export_payload(graph_data)
+        filename = f"{_original_graph_base_name(graph)}_新"
+        return send_file_in_mem(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            f"{filename}.json",
+        )
+    except Exception as e:
+        return server_error_response(e)
+
+
 @manager.route('/<graph_id>/knowledge_graph/subgraph', methods=['POST'])
 @login_required
 @validate_request("entity_name")
@@ -465,6 +681,122 @@ def neo4j_knowledge_graph_retrieval_test(graph_id):
             int(req.get("subgraph_depth", 2)),
         )
         return get_json_result(data=result)
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/<graph_id>/knowledge_graph/entities', methods=['POST'])
+@login_required
+def create_neo4j_entity(graph_id):
+    graph = _get_writable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    req = _get_json_payload()
+    missing_fields = _missing_required_payload(req, "entity_name")
+    if missing_fields:
+        return _missing_argument_result(missing_fields)
+    try:
+        entity = Neo4jKnowledgeGraphService.upsert_node(graph_id, graph.name, req)
+        graph_data = _sync_graph_counts(graph_id)
+        return get_json_result(data={"entity": entity, "graph": graph_data})
+    except ValueError as e:
+        return get_data_error_result(message=str(e))
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/<graph_id>/knowledge_graph/entities/<entity_id>', methods=['PUT'])
+@login_required
+def update_neo4j_entity(graph_id, entity_id):
+    graph = _get_writable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    req = _get_json_payload()
+    missing_fields = _missing_required_payload(req, "entity_name")
+    if missing_fields:
+        return _missing_argument_result(missing_fields)
+    req["id"] = entity_id
+    try:
+        entity = Neo4jKnowledgeGraphService.upsert_node(graph_id, graph.name, req)
+        graph_data = _sync_graph_counts(graph_id)
+        return get_json_result(data={"entity": entity, "graph": graph_data})
+    except ValueError as e:
+        return get_data_error_result(message=str(e))
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/<graph_id>/knowledge_graph/entities/<entity_id>', methods=['DELETE'])
+@login_required
+def delete_neo4j_entity(graph_id, entity_id):
+    graph = _get_writable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    try:
+        Neo4jKnowledgeGraphService.delete_node(graph_id, entity_id)
+        graph_data = _sync_graph_counts(graph_id)
+        return get_json_result(data={"graph": graph_data})
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/<graph_id>/knowledge_graph/relations', methods=['POST'])
+@login_required
+def create_neo4j_relation(graph_id):
+    graph = _get_writable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    req = _get_json_payload()
+    missing_fields = _missing_required_payload(req, "source", "target", "relation")
+    if missing_fields:
+        return _missing_argument_result(missing_fields)
+    try:
+        relation = Neo4jKnowledgeGraphService.upsert_edge(graph_id, req)
+        graph_data = _sync_graph_counts(graph_id)
+        return get_json_result(data={"relation": relation, "graph": graph_data})
+    except ValueError as e:
+        return get_data_error_result(message=str(e))
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/<graph_id>/knowledge_graph/relations/<relation_id>', methods=['PUT'])
+@login_required
+def update_neo4j_relation(graph_id, relation_id):
+    graph = _get_writable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    req = _get_json_payload()
+    missing_fields = _missing_required_payload(req, "source", "target", "relation")
+    if missing_fields:
+        return _missing_argument_result(missing_fields)
+    req["id"] = relation_id
+    try:
+        relation = Neo4jKnowledgeGraphService.upsert_edge(graph_id, req)
+        graph_data = _sync_graph_counts(graph_id)
+        return get_json_result(data={"relation": relation, "graph": graph_data})
+    except ValueError as e:
+        return get_data_error_result(message=str(e))
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/<graph_id>/knowledge_graph/relations/<relation_id>', methods=['DELETE'])
+@login_required
+def delete_neo4j_relation(graph_id, relation_id):
+    graph = _get_writable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    try:
+        Neo4jKnowledgeGraphService.delete_edge(graph_id, relation_id)
+        graph_data = _sync_graph_counts(graph_id)
+        return get_json_result(data={"graph": graph_data})
     except Exception as e:
         return server_error_response(e)
 

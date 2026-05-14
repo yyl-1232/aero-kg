@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'umi';
 import { FileUpload } from './file-upload';
+import { ManualGraphEditor } from './manual-graph-editor';
 
 type GraphManagementProps = {
   graphId: string;
@@ -163,6 +164,8 @@ export function GraphManagement({
             <FileUpload onUploaded={onUploaded} />
           )}
         </section>
+
+        <ManualGraphEditor graphId={graphId} />
 
         <section className="rounded-lg border bg-white p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-3">

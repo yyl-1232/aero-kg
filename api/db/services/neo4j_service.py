@@ -94,8 +94,8 @@ class Neo4jKnowledgeGraphService:
             "source": cls._client_id(record["source"]),
             "target": cls._client_id(record["target"]),
             "relation": relation,
-            "description": relation,
-            "weight": 1,
+            "description": record.get("description") or relation,
+            "weight": float(record.get("weight") or 1),
             "source_detail": list(record.get("source_detail") or []),
         }
 
@@ -122,6 +122,8 @@ class Neo4jKnowledgeGraphService:
                 "head_entity_id": str(edge["head_entity_id"]),
                 "tail_entity_id": str(edge["tail_entity_id"]),
                 "relation": str(edge["relation"]),
+                "description": cls._as_text(edge.get("description") or edge["relation"]),
+                "weight": float(edge.get("weight") or 1),
                 "source": cls._as_list(edge.get("source")),
             }
             for edge in edges
@@ -163,6 +165,8 @@ class Neo4jKnowledgeGraphService:
                                t.node_id AS target,
                                r.relation_id AS relation_id,
                                r.relation AS relation,
+                               r.description AS description,
+                               r.weight AS weight,
                                r.source AS source_detail
                         ORDER BY source, target
                         """,
@@ -478,10 +482,176 @@ class Neo4jKnowledgeGraphService:
             MATCH (t:KGNode {graph_id: $graph_id, node_id: row.tail_entity_id})
             MERGE (h)-[r:KG_RELATION {graph_id: $graph_id, relation_id: row.id}]->(t)
             SET r.relation = row.relation,
+                r.description = row.description,
+                r.weight = row.weight,
                 r.source = row.source
             """,
             graph_id=graph_id,
             edges=edges,
+        )
+
+    @classmethod
+    def upsert_node(cls, graph_id, graph_name, node):
+        if not cls.is_enabled():
+            return None
+
+        normalized = {
+            "id": str(node.get("id") or get_uuid()),
+            "entity_kwd": str(node.get("entity_name") or node.get("entity_kwd") or "").strip(),
+            "label": str(node.get("entity_type") or node.get("label") or "Entity").strip() or "Entity",
+            "aliases": cls._as_list(node.get("aliases")),
+            "description": cls._as_text(node.get("description")),
+            "source": cls._as_list(node.get("source")),
+        }
+        if not normalized["entity_kwd"]:
+            raise ValueError("Entity name can't be empty.")
+
+        conf = cls._config()
+        with cls._driver() as driver:
+            if not driver:
+                return None
+            with driver.session(database=conf["database"]) as session:
+                session.execute_write(cls._upsert_node, graph_id, graph_name, normalized)
+
+        return cls._format_node({"node_id": normalized["id"], **normalized})
+
+    @staticmethod
+    def _upsert_node(tx, graph_id, graph_name, node):
+        tx.run(
+            """
+            MERGE (g:KnowledgeGraph {id: $graph_id})
+            SET g.name = $graph_name, g.updated_at = timestamp()
+            MERGE (n:KGNode {graph_id: $graph_id, node_id: $node.id})
+            SET n.entity_kwd = $node.entity_kwd,
+                n.label = $node.label,
+                n.aliases = $node.aliases,
+                n.description = $node.description,
+                n.source = $node.source
+            MERGE (g)-[:HAS_NODE]->(n)
+            """,
+            graph_id=graph_id,
+            graph_name=graph_name,
+            node=node,
+        )
+
+    @classmethod
+    def delete_node(cls, graph_id, node_id):
+        if not cls.is_enabled():
+            return
+
+        conf = cls._config()
+        with cls._driver() as driver:
+            if not driver:
+                return
+            with driver.session(database=conf["database"]) as session:
+                session.execute_write(cls._delete_node, graph_id, str(node_id))
+
+    @staticmethod
+    def _delete_node(tx, graph_id, node_id):
+        tx.run(
+            "MATCH (n:KGNode {graph_id: $graph_id, node_id: $node_id}) DETACH DELETE n",
+            graph_id=graph_id,
+            node_id=node_id,
+        )
+
+    @classmethod
+    def upsert_edge(cls, graph_id, edge):
+        if not cls.is_enabled():
+            return None
+
+        normalized = {
+            "id": str(edge.get("id") or get_uuid()),
+            "source": str(edge.get("source") or edge.get("head_entity_id") or "").strip(),
+            "target": str(edge.get("target") or edge.get("tail_entity_id") or "").strip(),
+            "relation": str(edge.get("relation") or "").strip(),
+            "description": cls._as_text(edge.get("description") or edge.get("relation")),
+            "weight": float(edge.get("weight") or 1),
+            "source_detail": cls._as_list(edge.get("source_detail")),
+        }
+        if not normalized["source"] or not normalized["target"]:
+            raise ValueError("Relation source and target are required.")
+        if not normalized["relation"]:
+            raise ValueError("Relation type can't be empty.")
+
+        conf = cls._config()
+        with cls._driver() as driver:
+            if not driver:
+                return None
+            with driver.session(database=conf["database"]) as session:
+                exists = session.execute_read(cls._nodes_exist, graph_id, normalized["source"], normalized["target"])
+                if not exists:
+                    raise ValueError("Relation source or target entity does not exist.")
+                session.execute_write(cls._upsert_edge, graph_id, normalized)
+
+        return cls._format_edge({
+            "relation_id": normalized["id"],
+            "source": normalized["source"],
+            "target": normalized["target"],
+            "relation": normalized["relation"],
+            "description": normalized["description"],
+            "weight": normalized["weight"],
+            "source_detail": normalized["source_detail"],
+        })
+
+    @staticmethod
+    def _nodes_exist(tx, graph_id, source, target):
+        record = tx.run(
+            """
+            MATCH (s:KGNode {graph_id: $graph_id, node_id: $source})
+            MATCH (t:KGNode {graph_id: $graph_id, node_id: $target})
+            RETURN count(s) AS source_count, count(t) AS target_count
+            """,
+            graph_id=graph_id,
+            source=source,
+            target=target,
+        ).single()
+        return bool(record and record["source_count"] == 1 and record["target_count"] == 1)
+
+    @staticmethod
+    def _upsert_edge(tx, graph_id, edge):
+        tx.run(
+            """
+            MATCH (:KGNode {graph_id: $graph_id})-[r:KG_RELATION {graph_id: $graph_id, relation_id: $edge.id}]->(:KGNode {graph_id: $graph_id})
+            DELETE r
+            """,
+            graph_id=graph_id,
+            edge=edge,
+        )
+        tx.run(
+            """
+            MATCH (h:KGNode {graph_id: $graph_id, node_id: $edge.source})
+            MATCH (t:KGNode {graph_id: $graph_id, node_id: $edge.target})
+            MERGE (h)-[r:KG_RELATION {graph_id: $graph_id, relation_id: $edge.id}]->(t)
+            SET r.relation = $edge.relation,
+                r.description = $edge.description,
+                r.weight = $edge.weight,
+                r.source = $edge.source_detail
+            """,
+            graph_id=graph_id,
+            edge=edge,
+        )
+
+    @classmethod
+    def delete_edge(cls, graph_id, relation_id):
+        if not cls.is_enabled():
+            return
+
+        conf = cls._config()
+        with cls._driver() as driver:
+            if not driver:
+                return
+            with driver.session(database=conf["database"]) as session:
+                session.execute_write(cls._delete_edge, graph_id, str(relation_id))
+
+    @staticmethod
+    def _delete_edge(tx, graph_id, relation_id):
+        tx.run(
+            """
+            MATCH (:KGNode {graph_id: $graph_id})-[r:KG_RELATION {graph_id: $graph_id, relation_id: $relation_id}]->(:KGNode {graph_id: $graph_id})
+            DELETE r
+            """,
+            graph_id=graph_id,
+            relation_id=relation_id,
         )
 
     @classmethod

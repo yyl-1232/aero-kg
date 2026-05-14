@@ -156,6 +156,8 @@ def validate_request(*args, **kwargs):
         @wraps(func)
         def decorated_function(*_args, **_kwargs):
             input_arguments = flask_request.json or flask_request.form.to_dict()
+            if isinstance(input_arguments.get("data"), dict):
+                input_arguments = {**input_arguments, **input_arguments["data"]}
             no_arguments = []
             error_arguments = []
             for arg in args:

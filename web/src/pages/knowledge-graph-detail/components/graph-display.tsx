@@ -17,6 +17,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { ManualGraphEditor } from './manual-graph-editor';
 interface GraphDisplayProps {
   kbId: string;
   kbData: any;
@@ -40,6 +41,7 @@ interface Edge {
   description: string;
   weight: number;
   source_detail?: string[];
+  mergedEdges?: Edge[];
 }
 
 interface GraphData {
@@ -102,6 +104,110 @@ function truncateText(text: string, max = 18) {
   return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
+const DEFAULT_EDGE_CURVATURE = 0.15;
+
+function getEdgeGroupKey(edge: Edge) {
+  return `${edge.source}->${edge.target}`;
+}
+
+function uniqueNonEmpty(values: Array<string | undefined>) {
+  return Array.from(
+    new Set(values.map((value) => value?.trim()).filter(Boolean) as string[]),
+  );
+}
+
+function mergeEdgesForDisplay(edges: Edge[]) {
+  const groups = new Map<string, Edge[]>();
+
+  edges.forEach((edge) => {
+    const key = getEdgeGroupKey(edge);
+    const group = groups.get(key);
+    if (group) {
+      group.push(edge);
+    } else {
+      groups.set(key, [edge]);
+    }
+  });
+
+  return Array.from(groups.entries()).map(([key, group]) => {
+    if (group.length === 1) return group[0];
+
+    const [first] = group;
+    const relations = uniqueNonEmpty(group.map((edge) => edge.relation));
+    const descriptions = uniqueNonEmpty(group.map((edge) => edge.description));
+    const sourceDetails = uniqueNonEmpty(
+      group.flatMap((edge) => edge.source_detail || []),
+    );
+    const totalWeight = group.reduce(
+      (sum, edge) => sum + (typeof edge.weight === 'number' ? edge.weight : 0),
+      0,
+    );
+
+    return {
+      ...first,
+      id: `merged:${key}`,
+      relation: relations.join(' / '),
+      description: descriptions.join('\n'),
+      source_detail: sourceDetails,
+      weight: totalWeight / group.length,
+      mergedEdges: group,
+    };
+  });
+}
+
+function getQuadraticControlPoint(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  curvature: number,
+) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+
+  return {
+    x: midX - dy * curvature,
+    y: midY + dx * curvature,
+  };
+}
+
+function getQuadraticPoint(
+  x1: number,
+  y1: number,
+  cx: number,
+  cy: number,
+  x2: number,
+  y2: number,
+  t: number,
+) {
+  const oneMinusT = 1 - t;
+  return {
+    x: oneMinusT * oneMinusT * x1 + 2 * oneMinusT * t * cx + t * t * x2,
+    y: oneMinusT * oneMinusT * y1 + 2 * oneMinusT * t * cy + t * t * y2,
+  };
+}
+
+function getPointToSegmentDistance(
+  px: number,
+  py: number,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+
+  const t = clamp(((px - x1) * dx + (py - y1) * dy) / lenSq, 0, 1);
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2);
+}
+
 // ✅ 新增：绘制曲线箭头的函数
 function drawCurvedArrow(
   ctx: CanvasRenderingContext2D,
@@ -118,25 +224,16 @@ function drawCurvedArrow(
 
   if (dist < 1) return;
 
-  // 计算控制点（贝塞尔曲线）
-  const midX = (x1 + x2) / 2;
-  const midY = (y1 + y2) / 2;
-
-  // 垂直于连线方向的偏移
-  const offsetX = -dy * curvature;
-  const offsetY = dx * curvature;
-
-  const controlX = midX + offsetX;
-  const controlY = midY + offsetY;
+  const control = getQuadraticControlPoint(x1, y1, x2, y2, curvature);
 
   // 绘制曲线
   ctx.beginPath();
   ctx.moveTo(x1, y1);
-  ctx.quadraticCurveTo(controlX, controlY, x2, y2);
+  ctx.quadraticCurveTo(control.x, control.y, x2, y2);
   ctx.stroke();
 
   // 在终点绘制箭头
-  const angle = Math.atan2(y2 - controlY, x2 - controlX);
+  const angle = Math.atan2(y2 - control.y, x2 - control.x);
 
   ctx.save();
   ctx.translate(x2, y2);
@@ -183,6 +280,11 @@ function InteractiveForceGraph({
   const NODE_SELECTED_RADIUS = 14;
 
   const PADDING = 40;
+
+  const displayLinks = useMemo(
+    () => mergeEdgesForDisplay(data.links),
+    [data.links],
+  );
 
   // 画布自适应父容器
   useEffect(() => {
@@ -297,7 +399,7 @@ function InteractiveForceGraph({
       });
 
       // ✅ 2) 边的弹簧力：让有连接的节点相互靠近的关键！
-      data.links.forEach((link) => {
+      displayLinks.forEach((link) => {
         const p1 = newPositions.get(link.source);
         const p2 = newPositions.get(link.target);
         if (!p1 || !p2) return;
@@ -392,7 +494,7 @@ function InteractiveForceGraph({
     };
   }, [
     data.nodes,
-    data.links.length,
+    displayLinks,
     nodePositions,
     draggedNode,
     canvasSize.width,
@@ -433,14 +535,14 @@ function InteractiveForceGraph({
     const selectedId = selectedNode?.id;
     const neighborIds = new Set<number>();
     if (selectedId !== undefined) {
-      data.links.forEach((link) => {
+      displayLinks.forEach((link) => {
         if (link.source === selectedId) neighborIds.add(link.target);
         if (link.target === selectedId) neighborIds.add(link.source);
       });
     }
 
     // ✅ 边（曲线箭头）
-    data.links.forEach((link) => {
+    displayLinks.forEach((link) => {
       const s = nodePositions.get(link.source);
       const t = nodePositions.get(link.target);
       if (!s || !t) return;
@@ -478,21 +580,41 @@ function InteractiveForceGraph({
 
       const endX = s.x + dx * ratio;
       const endY = s.y + dy * ratio;
+      const curvature = DEFAULT_EDGE_CURVATURE;
 
       // 绘制曲线箭头
-      drawCurvedArrow(ctx, s.x, s.y, endX, endY, 0.15);
+      drawCurvedArrow(ctx, s.x, s.y, endX, endY, curvature);
 
-      if (isSelected || isHovered) {
-        const label = truncateText(link.relation, 16);
-        const midX = (s.x + t.x) / 2;
-        const midY = (s.y + t.y) / 2;
+      if (isSelected || isHovered || link.mergedEdges) {
+        const label = truncateText(link.relation, link.mergedEdges ? 32 : 16);
+        const control = getQuadraticControlPoint(
+          s.x,
+          s.y,
+          endX,
+          endY,
+          curvature,
+        );
+        const labelPoint = getQuadraticPoint(
+          s.x,
+          s.y,
+          control.x,
+          control.y,
+          endX,
+          endY,
+          0.5,
+        );
         const textWidth = ctx.measureText(label).width;
         ctx.fillStyle = 'rgba(255,255,255,0.95)';
-        ctx.fillRect(midX - textWidth / 2 - 6, midY - 11, textWidth + 12, 22);
+        ctx.fillRect(
+          labelPoint.x - textWidth / 2 - 6,
+          labelPoint.y - 11,
+          textWidth + 12,
+          22,
+        );
         ctx.fillStyle = '#334155';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(label, midX, midY);
+        ctx.fillText(label, labelPoint.x, labelPoint.y);
       }
 
       ctx.globalAlpha = 1;
@@ -573,6 +695,7 @@ function InteractiveForceGraph({
     hoveredEdge,
     selectedNode,
     selectedEdge,
+    displayLinks,
     canvasSize,
   ]);
 
@@ -590,7 +713,7 @@ function InteractiveForceGraph({
   };
 
   const getEdgeAt = (x: number, y: number) => {
-    for (const edge of data.links) {
+    for (const edge of displayLinks) {
       const s = nodePositions.get(edge.source);
       const t = nodePositions.get(edge.target);
       if (!s || !t) continue;
@@ -600,13 +723,34 @@ function InteractiveForceGraph({
       const len = Math.sqrt(dx * dx + dy * dy);
       if (len === 0) continue;
 
-      const dot = ((x - s.x) * dx + (y - s.y) * dy) / (len * len);
-      if (dot < 0 || dot > 1) continue;
+      const endRatio = (len - NODE_BASE_RADIUS - 2) / len;
+      const endX = s.x + dx * endRatio;
+      const endY = s.y + dy * endRatio;
+      const curvature = DEFAULT_EDGE_CURVATURE;
+      const control = getQuadraticControlPoint(s.x, s.y, endX, endY, curvature);
 
-      const px = s.x + dot * dx;
-      const py = s.y + dot * dy;
-
-      if (Math.sqrt((x - px) ** 2 + (y - py) ** 2) <= 8) return edge;
+      let previous = { x: s.x, y: s.y };
+      for (let i = 1; i <= 24; i += 1) {
+        const current = getQuadraticPoint(
+          s.x,
+          s.y,
+          control.x,
+          control.y,
+          endX,
+          endY,
+          i / 24,
+        );
+        const distance = getPointToSegmentDistance(
+          x,
+          y,
+          previous.x,
+          previous.y,
+          current.x,
+          current.y,
+        );
+        if (distance <= 8) return edge;
+        previous = current;
+      }
     }
     return null;
   };
@@ -718,6 +862,7 @@ function DetailPanel({
 
   const showEdgeWeight =
     typeof edge?.weight === 'number' && Math.abs(edge.weight - 2) > 1e-9;
+  const mergedEdges = edge?.mergedEdges || [];
 
   const sourceName = edge
     ? (nodeNameById.get(edge.source) ?? `节点 ${edge.source}`)
@@ -822,6 +967,25 @@ function DetailPanel({
             </div>
           </div>
 
+          {mergedEdges.length > 1 && (
+            <div>
+              <div className="text-xs text-gray-500">展示方式</div>
+              <div className="mt-1 text-slate-700">
+                已合并展示 {mergedEdges.length} 条同向关系，底层仍保留独立记录。
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {mergedEdges.map((item, index) => (
+                  <span
+                    key={item.id || `${item.source}-${item.target}-${index}`}
+                    className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
+                  >
+                    {item.relation}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {showEdgeDescription && (
             <div>
               <div className="text-xs text-gray-500">描述</div>
@@ -909,6 +1073,7 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
 
   const [searchEntity, setSearchEntity] = useState('');
   const [searchDepth, setSearchDepth] = useState('2');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
@@ -959,6 +1124,21 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
       graphData.nodes.map((n) => [n.id, n.entity_name]),
     );
   }, [graphData.nodes]);
+
+  const entitySuggestions = useMemo(() => {
+    const keyword = searchEntity.trim().toLowerCase();
+    if (!keyword) return [];
+
+    const nodes = originalGraphData.nodes.length
+      ? originalGraphData.nodes
+      : graphData.nodes;
+
+    return nodes
+      .filter((node) => {
+        return node.entity_name.toLowerCase().includes(keyword);
+      })
+      .slice(0, 8);
+  }, [graphData.nodes, originalGraphData.nodes, searchEntity]);
 
   /**
    * 🔍 查询子图
@@ -1048,13 +1228,41 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
-          <Input
-            value={searchEntity}
-            onChange={(e) => setSearchEntity(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearchSubgraph()}
-            placeholder="输入实体名称，例如：高超声速飞行器"
-            className="w-64"
-          />
+          <div className="relative w-64">
+            <Input
+              value={searchEntity}
+              onChange={(e) => setSearchEntity(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearchSubgraph()}
+              placeholder="输入实体名称，例如：高超声速飞行器"
+              className="w-full"
+            />
+            {searchFocused && entitySuggestions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-auto rounded-md border bg-white py-1 shadow-lg">
+                {entitySuggestions.map((node) => (
+                  <button
+                    key={node.id}
+                    type="button"
+                    className="block w-full px-3 py-2 text-left hover:bg-slate-50"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      setSearchEntity(node.entity_name);
+                      setSearchFocused(false);
+                    }}
+                  >
+                    <div className="truncate text-sm font-medium text-slate-900">
+                      {node.entity_name}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                      <span>{node.entity_type || 'ENTITY'}</span>
+                      <span>ID: {node.id}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <Select value={searchDepth} onValueChange={setSearchDepth}>
             <SelectTrigger className="w-24">
@@ -1081,6 +1289,12 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
           <Button variant="outline" onClick={handleRefreshGraph}>
             刷新图谱
           </Button>
+
+          <ManualGraphEditor
+            graphId={kbId}
+            variant="button"
+            onGraphChanged={handleRefreshGraph}
+          />
         </div>
       </div>
 
