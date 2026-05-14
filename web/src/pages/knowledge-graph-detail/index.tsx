@@ -8,73 +8,55 @@ import {
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
-import {
-  useFetchKnowledgeBaseConfiguration,
-  useKnowledgeBaseId,
-  useRemoveKnowledgeGraph,
-} from '@/hooks/knowledge-hooks';
+import { useFetchKnowledgeBaseConfiguration } from '@/hooks/knowledge-hooks';
 import { cn } from '@/lib/utils';
-import { getKnowledgeGraph } from '@/services/knowledge-service';
+import { getAuthorization } from '@/utils/authorization-util';
 import { formatPureDate } from '@/utils/date';
-import { useQueryClient } from '@tanstack/react-query';
-import { message } from 'antd';
-import { FileSearch2, GitGraph, Trash2, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react'; // 添加 useEffect
+import { FileSearch2, GitGraph, Settings2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'umi';
-import { FileUpload } from './components/file-upload';
 import GraphDisplay from './components/graph-display';
+import { GraphManagement } from './components/graph-management';
 import RetrievalTest from './components/retrieval-test';
-type TabType = 'graph-display' | 'retrieval-test' | 'file-upload';
+
+type TabType = 'graph-display' | 'retrieval-test' | 'graph-management';
+
 const KnowledgeGraphDetail = () => {
   const { id } = useParams();
-  const datasetId = useKnowledgeBaseId();
   const { data: kbData, loading: kbLoading } =
     useFetchKnowledgeBaseConfiguration();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('graph-display');
   const [hasExistingFile, setHasExistingFile] = useState(false);
-  console.log('kbData:', kbData);
+
   useEffect(() => {
     const checkExistingFile = async () => {
-      if (kbData?.id) {
-        try {
-          const response = await getKnowledgeGraph(kbData.id);
-          const graphData = response.data?.graph;
-          // 更精确的检查：只有当 graph 包含 nodes 或 edges 数据时才认为已上传
-          const hasGraphData =
+      if (!id) return;
+      try {
+        const response = await fetch(`/v1/graph/${id}/knowledge_graph`, {
+          headers: { Authorization: getAuthorization() },
+        });
+        const result = await response.json();
+        const graphData = result.data?.graph || result.graph;
+        setHasExistingFile(
+          Boolean(
             graphData &&
             ((graphData.nodes && graphData.nodes.length > 0) ||
-              (graphData.edges && graphData.edges.length > 0));
-          setHasExistingFile(hasGraphData);
-        } catch (error) {
-          setHasExistingFile(false);
-        }
+              (graphData.edges && graphData.edges.length > 0)),
+          ),
+        );
+      } catch {
+        setHasExistingFile(false);
       }
     };
-    checkExistingFile();
-  }, [kbData?.id]);
 
-  const { removeKnowledgeGraph } = useRemoveKnowledgeGraph();
-  const handleDeleteExistingFile = async () => {
-    if (kbData?.id) {
-      const ret = await removeKnowledgeGraph();
-      if (ret === 0) {
-        setHasExistingFile(false);
-        message.success('知识图谱文件已删除，可以重新上传');
-      }
-    }
-  };
+    checkExistingFile();
+  }, [id]);
 
   const handleBackToList = () => {
     navigate('/knowledge-graph');
-  };
-  const refreshKnowledgeGraph = () => {
-    let queryClient = useQueryClient();
-    queryClient.invalidateQueries({
-      queryKey: ['fetchKnowledgeGraph', datasetId],
-    });
   };
 
   const tabs = [
@@ -89,20 +71,18 @@ const KnowledgeGraphDetail = () => {
       icon: FileSearch2,
     },
     {
-      key: 'file-upload' as TabType,
-      label: '实体-关系文件上传',
-      icon: Upload,
+      key: 'graph-management' as TabType,
+      label: '图谱管理',
+      icon: Settings2,
     },
   ];
 
-  // 显示加载状态
   if (kbLoading) {
     return <div className="p-6">加载中...</div>;
   }
 
   return (
-    <div className="flex flex-col w-full h-screen bg-background text-foreground">
-      {/* 顶部面包屑 */}
+    <div className="flex h-screen w-full flex-col bg-background text-foreground">
       <div className="p-6 pb-0">
         <Breadcrumb>
           <BreadcrumbList>
@@ -121,22 +101,19 @@ const KnowledgeGraphDetail = () => {
         </Breadcrumb>
       </div>
 
-      {/* 主要内容区域 */}
       <div className="flex flex-1 bg-background">
-        {/* 左侧边栏 */}
-        <aside className="relative p-5 space-y-8 w-80">
-          {/* 知识图谱基本信息 */}
-          <div className="flex gap-2.5 max-w-[200px] items-center">
+        <aside className="relative w-80 space-y-8 p-5">
+          <div className="flex max-w-[220px] items-center gap-2.5">
             <RAGFlowAvatar
               avatar={kbData?.avatar}
               name={kbData?.name}
               className="size-16"
             />
-            <div className="text-text-secondary text-xs space-y-1 overflow-hidden">
-              <h3 className="text-lg font-semibold line-clamp-1 text-text-primary">
+            <div className="space-y-1 overflow-hidden text-xs text-text-secondary">
+              <h3 className="line-clamp-1 text-lg font-semibold text-text-primary">
                 {kbData?.name}
               </h3>
-              <div className="flex justify-between">
+              <div className="flex gap-4">
                 <span>{kbData?.node_num ?? 0} 节点</span>
                 <span>{kbData?.edge_num ?? 0} 关系</span>
               </div>
@@ -144,8 +121,7 @@ const KnowledgeGraphDetail = () => {
             </div>
           </div>
 
-          {/* 功能按钮 */}
-          <div className="w-full flex flex-col gap-3">
+          <div className="flex w-full flex-col gap-3">
             {tabs.map((tab) => {
               const active = activeTab === tab.key;
               return (
@@ -153,7 +129,7 @@ const KnowledgeGraphDetail = () => {
                   key={tab.key}
                   variant={active ? 'secondary' : 'ghost'}
                   className={cn(
-                    'w-full justify-start gap-2.5 px-3 relative h-10 text-text-sub-title-invert',
+                    'relative h-10 w-full justify-start gap-2.5 px-3 text-text-sub-title-invert',
                     {
                       'bg-bg-card': active,
                       'text-text-primary': active,
@@ -169,7 +145,6 @@ const KnowledgeGraphDetail = () => {
           </div>
         </aside>
 
-        {/* 右侧内容区域 */}
         <main className="flex-1 p-6">
           {activeTab === 'graph-display' && (
             <GraphDisplay kbId={id || ''} kbData={kbData} />
@@ -177,34 +152,19 @@ const KnowledgeGraphDetail = () => {
 
           {activeTab === 'retrieval-test' && (
             <div className="h-full">
-              <h2 className="text-xl font-semibold mb-4">检索测试</h2>
+              <h2 className="mb-4 text-xl font-semibold">检索测试</h2>
               <RetrievalTest knowledgeGraphId={id || ''} />
             </div>
           )}
 
-          {activeTab === 'file-upload' && (
+          {activeTab === 'graph-management' && (
             <div className="h-full">
-              <h2 className="text-xl font-semibold mb-4">实体-关系文件上传</h2>
-              <div className="bg-white rounded-lg border p-4 h-[calc(100%-3rem)]">
-                {hasExistingFile ? (
-                  <div className="flex flex-col items-center justify-center h-full space-y-4">
-                    <div className="text-gray-600">
-                      <p className="text-lg font-medium">已上传知识图谱文件</p>
-                      <p className="text-sm">如需更新，请先删除现有文件</p>
-                    </div>
-                    <Button
-                      variant="destructive"
-                      onClick={handleDeleteExistingFile}
-                      className="flex items-center gap-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      删除现有文件
-                    </Button>
-                  </div>
-                ) : (
-                  <FileUpload /> // 保留原有的文件上传组件
-                )}
-              </div>
+              <GraphManagement
+                graphId={id || ''}
+                graphData={kbData}
+                hasExistingFile={hasExistingFile}
+                onUploaded={() => setHasExistingFile(true)}
+              />
             </div>
           )}
         </main>

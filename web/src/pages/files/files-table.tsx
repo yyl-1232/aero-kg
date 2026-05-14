@@ -107,17 +107,11 @@ export function FilesTable({
         />
       ),
       cell: ({ row }) => {
-        const file = row.original;
-        const isKnowledgeGraphFile = file.source_type === 'knowledgegraph';
-
         return (
           <Checkbox
             checked={row.getIsSelected()}
-            onCheckedChange={(value) =>
-              !isKnowledgeGraphFile && row.toggleSelected(!!value)
-            }
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
             aria-label="Select row"
-            disabled={isKnowledgeGraphFile}
           />
         );
       },

@@ -278,6 +278,9 @@ def rm():
                     elif name == "relations.json":
                         deleted_graph_types.add("relation")
                         deleted_graph_file_ids.add(inner_file_id)
+                    elif inner_file.source_type == FileSource.KNOWLEDGEGRAPH and name.endswith(".json"):
+                        deleted_graph_types.update(["entity", "relation"])
+                        deleted_graph_file_ids.add(inner_file_id)
 
                 FileService.delete_folder_by_pf_id(current_user.id, file_id)
 
@@ -293,6 +296,9 @@ def rm():
                     deleted_graph_file_ids.add(file_id)
                 elif name == "relations.json":
                     deleted_graph_types.add("relation")
+                    deleted_graph_file_ids.add(file_id)
+                elif file.source_type == FileSource.KNOWLEDGEGRAPH and name.endswith(".json"):
+                    deleted_graph_types.update(["entity", "relation"])
                     deleted_graph_file_ids.add(file_id)
 
             # -------------------------
@@ -322,54 +328,42 @@ def rm():
         if deleted_graph_types:
 
             from api.db.services.knowledge_graph_service import KnowledgeGraphService
+            from api.db.services.neo4j_service import Neo4jKnowledgeGraphService
             from api.utils import current_timestamp
 
             graphs = KnowledgeGraphService.query(tenant_id=current_user.id)
             if not graphs:
                 print("未找到知识图谱记录，跳过更新")
             else:
-                graph = graphs[0]
                 current_time = current_timestamp()
+                for graph in graphs:
+                    graph_file_ids = graph.file_ids or []
+                    if not set(graph_file_ids).intersection(deleted_graph_file_ids):
+                        continue
 
-                # --------- 全删（实体 + 关系）---------
-                if {"entity", "relation"}.issubset(deleted_graph_types):
-                    KnowledgeGraphService.model.update(
-                        node_num=0,
-                        edge_num=0,
-                        file_ids=[],
-                        update_time=current_time
-                    ).where(
-                        KnowledgeGraphService.model.id == graph.id
-                    ).execute()
-
-                # --------- 只删实体 ---------
-                elif "entity" in deleted_graph_types:
-                    KnowledgeGraphService.model.update(
-                        node_num=0,
-                        update_time=current_time
-                    ).where(
-                        KnowledgeGraphService.model.id == graph.id
-                    ).execute()
-
-                # --------- 只删关系 ---------
-                elif "relation" in deleted_graph_types:
-                    KnowledgeGraphService.model.update(
-                        edge_num=0,
-                        update_time=current_time
-                    ).where(
-                        KnowledgeGraphService.model.id == graph.id
-                    ).execute()
-
-                # --------- 同步 file_ids ---------
-                if graph.file_ids:
                     new_file_ids = [
-                        fid for fid in graph.file_ids
+                        fid for fid in graph_file_ids
                         if fid not in deleted_graph_file_ids
                     ]
+                    update_data = {
+                        "file_ids": new_file_ids,
+                        "update_time": current_time,
+                    }
+
+                    # 合并后的知识图谱 JSON 被删除后，需要同步清空图谱统计和 Neo4j 数据。
+                    if {"entity", "relation"}.issubset(deleted_graph_types):
+                        Neo4jKnowledgeGraphService.delete_graph(graph.id)
+                        update_data.update({
+                            "node_num": 0,
+                            "edge_num": 0,
+                        })
+                    elif "entity" in deleted_graph_types:
+                        update_data["node_num"] = 0
+                    elif "relation" in deleted_graph_types:
+                        update_data["edge_num"] = 0
 
                     KnowledgeGraphService.model.update(
-                        file_ids=new_file_ids,
-                        update_time=current_time
+                        **update_data
                     ).where(
                         KnowledgeGraphService.model.id == graph.id
                     ).execute()

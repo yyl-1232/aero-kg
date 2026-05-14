@@ -434,7 +434,14 @@ def get_graph_data_from_files(kb):
 
             try:
                 data = json.loads(file_content)
-                if isinstance(data, list) and len(data) > 0:
+                if isinstance(data, dict):
+                    nodes = data.get("nodes")
+                    edges = data.get("edges")
+                    if isinstance(nodes, list):
+                        entities.extend(nodes)
+                    if isinstance(edges, list):
+                        relations.extend(edges)
+                elif isinstance(data, list) and len(data) > 0:
                     # 判断是实体数组还是关系数组
                     if "entity_kwd" in data[0]:
                         entities.extend(data)

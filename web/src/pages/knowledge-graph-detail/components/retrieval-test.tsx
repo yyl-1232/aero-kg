@@ -9,7 +9,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { useKnowledgeBaseId } from '@/hooks/knowledge-hooks';
 import { getAuthorization } from '@/utils/authorization-util';
 import { Info } from 'lucide-react';
 import { useState } from 'react';
@@ -44,7 +43,6 @@ export default function RetrievalTest({
   knowledgeGraphId,
 }: RetrievalTestProps) {
   const { t } = useTranslation();
-  const kbId = useKnowledgeBaseId();
   const [question, setQuestion] = useState('');
   const [similarityThreshold, setSimilarityThreshold] = useState(0.3);
   const [subgraphDepth, setSubgraphDepth] = useState(2);
@@ -54,7 +52,7 @@ export default function RetrievalTest({
     setLoading(true);
     try {
       const response = await fetch(
-        `/v1/kb/${kbId}/knowledge_graph/retrieval_test`,
+        `/v1/graph/${knowledgeGraphId}/knowledge_graph/retrieval_test`,
         {
           method: 'POST',
           headers: {
@@ -62,7 +60,6 @@ export default function RetrievalTest({
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            kb_id: knowledgeGraphId,
             question,
             similarity_threshold: similarityThreshold,
             subgraph_depth: subgraphDepth,

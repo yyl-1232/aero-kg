@@ -29,7 +29,7 @@ from peewee import fn
 
 from agentic_reasoning import DeepResearcher
 from api import settings
-from api.db import LLMType, ParserType, StatusEnum
+from api.db import LLMType, ParserType, StatusEnum, TenantPermission
 from api.db.db_models import DB, Dialog
 from api.db.services.common_service import CommonService
 from api.db.services.document_service import DocumentService
@@ -37,7 +37,9 @@ from api.db.services.knowledge_graph_service import KnowledgeGraphService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.langfuse_service import TenantLangfuseService
 from api.db.services.llm_service import LLMBundle
+from api.db.services.neo4j_service import Neo4jKnowledgeGraphService
 from api.db.services.tenant_llm_service import TenantLLMService
+from api.db.services.user_service import UserTenantService
 from api.utils import current_timestamp, datetime_format
 from graphrag.general.mind_map_extractor import MindMapExtractor
 from rag.app.resume import forbidden_select_fields4resume
@@ -48,7 +50,6 @@ from rag.prompts import chunks_format, citation_prompt, cross_languages, full_qu
 from rag.prompts.prompts import gen_meta_filter, PROMPT_JINJA_ENV, ASK_SUMMARY
 from rag.utils import num_tokens_from_string, rmSpace
 from rag.utils.tavily_conn import Tavily
-from api.apps.kb_app import knowledge_graph_retrieval
 
 
 class DialogService(CommonService):
@@ -229,6 +230,29 @@ def get_models(dialog):
     return kbs, embd_mdl, rerank_mdl, chat_mdl, tts_mdl
 
 
+def _knowledge_graph_readable(kg_id, user_id):
+    if not user_id:
+        e, _ = KnowledgeGraphService.get_by_id(kg_id)
+        return e
+
+    joined_tenant_ids = [
+        tenant.tenant_id
+        for tenant in UserTenantService.query(user_id=user_id)
+    ]
+    graphs = KnowledgeGraphService.model.select().where(
+        (KnowledgeGraphService.model.id == kg_id)
+        & (KnowledgeGraphService.model.status == StatusEnum.VALID.value)
+        & (
+            (KnowledgeGraphService.model.tenant_id == user_id)
+            | (
+                KnowledgeGraphService.model.tenant_id.in_(joined_tenant_ids)
+                & (KnowledgeGraphService.model.permission == TenantPermission.TEAM.value)
+            )
+        )
+    )
+    return graphs.exists()
+
+
 BAD_CITATION_PATTERNS = [
     re.compile(r"\(\s*ID\s*[: ]*\s*(\d+)\s*\)"),  # (ID: 12)
     re.compile(r"\[\s*ID\s*[: ]*\s*(\d+)\s*\]"),  # [ID: 12]
@@ -317,7 +341,11 @@ def meta_filter(metas: dict, filters: list[dict]):
 
 def chat(dialog, messages, stream=True,user_id=None, **kwargs):
     assert messages[-1]["role"] == "user", "The last content of this conversation is not from user."
-    if not dialog.kb_ids and not dialog.prompt_config.get("tavily_api_key"):
+    has_knowledge_graph = bool(
+        dialog.prompt_config.get("use_kg")
+        and dialog.prompt_config.get("kg_ids")
+    )
+    if not dialog.kb_ids and not dialog.prompt_config.get("tavily_api_key") and not has_knowledge_graph:
         for ans in chat_solo(dialog, messages, stream):
             yield ans
         return
@@ -454,14 +482,18 @@ def chat(dialog, messages, stream=True,user_id=None, **kwargs):
                 kbinfos["doc_aggs"].extend(tav_res["doc_aggs"])
             if prompt_config.get("use_kg"):
                 for kg_id in prompt_config.get("kg_ids", []):
+                    if not _knowledge_graph_readable(kg_id, user_id or dialog.tenant_id):
+                        logging.warning("Skip unreadable knowledge graph in chat retrieval: %s", kg_id)
+                        continue
                     e, kg = KnowledgeGraphService.get_by_id(kg_id)
                     kg_name = kg.name if e else "Unknown"
-                    kg_result = knowledge_graph_retrieval(
-                        kb_id=kg_id,
+                    if not e:
+                        continue
+                    kg_result = Neo4jKnowledgeGraphService.retrieval_test(
+                        graph_id=kg_id,
                         question=" ".join(questions),
                         similarity_threshold=prompt_config.get("kg_similarity_threshold", 0.3),
                         subgraph_depth=prompt_config.get("kg_mining_depth", 2),
-                        user_id=user_id or dialog.tenant_id,
                     )
                     if kg_result.get("content_with_weight"):
                         kg_result["kg_id"] = kg_id

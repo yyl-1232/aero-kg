@@ -43,6 +43,9 @@ const ActionCell = ({
   const { downloadFile, loading } = useDownloadFile();
   const extension = getExtension(record.name);
   const isKnowledgeBase = record.source_type === 'knowledgebase';
+  const isManagedFile =
+    record.source_type === 'knowledgebase' ||
+    record.source_type === 'knowledgegraph';
 
   const onDownloadDocument = () => {
     downloadFile({
@@ -70,7 +73,7 @@ const ActionCell = ({
 
   return (
     <Space size={0}>
-      {isKnowledgeBase || (
+      {isManagedFile || (
         <Tooltip title={t('addToKnowledge')}>
           <Button type="text" onClick={onShowConnectToKnowledgeModal}>
             <LinkOutlined size={20} />
@@ -78,14 +81,14 @@ const ActionCell = ({
         </Tooltip>
       )}
 
-      {isKnowledgeBase || (
+      {isManagedFile || (
         <Tooltip title={t('rename', { keyPrefix: 'common' })}>
           <Button type="text" disabled={beingUsed} onClick={onShowRenameModal}>
             <EditOutlined size={20} />
           </Button>
         </Tooltip>
       )}
-      {isKnowledgeBase || (
+      {isManagedFile || (
         <Tooltip title={t('move', { keyPrefix: 'common' })}>
           <Button
             type="text"

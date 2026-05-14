@@ -29,6 +29,12 @@ redis:
   db: 1
   password: '${REDIS_PASSWORD:-infini_rag_flow}'
   host: '${REDIS_HOST:-redis}:6379'
+neo4j:
+  enabled: ${NEO4J_ENABLED:-true}
+  uri: 'bolt://${NEO4J_HOST:-neo4j}:7687'
+  user: '${NEO4J_USER:-neo4j}'
+  password: '${NEO4J_PASSWORD:-infini_rag_flow}'
+  database: '${NEO4J_DATABASE:-neo4j}'
 
 # postgres:
 #   name: '${POSTGRES_DBNAME:-rag_flow}'

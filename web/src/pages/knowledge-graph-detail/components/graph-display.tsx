@@ -8,11 +8,15 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Authorization } from '@/constants/authorization';
-import { useFetchKnowledgeGraph } from '@/hooks/knowledge-hooks';
 import { getAuthorization } from '@/utils/authorization-util';
-import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 interface GraphDisplayProps {
   kbId: string;
   kbData: any;
@@ -25,14 +29,17 @@ interface Node {
   pagerank: number;
   communities: any[];
   source: string[];
+  aliases?: string[];
 }
 
 interface Edge {
+  id?: string;
   source: number;
   target: number;
   relation: string;
   description: string;
   weight: number;
+  source_detail?: string[];
 }
 
 interface GraphData {
@@ -51,6 +58,48 @@ const EMPTY_GRAPH: GraphData = { nodes: [], edges: [] };
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
+}
+
+const TYPE_COLORS = [
+  '#2563eb',
+  '#dc2626',
+  '#059669',
+  '#d97706',
+  '#7c3aed',
+  '#0891b2',
+  '#be123c',
+  '#4f46e5',
+  '#65a30d',
+  '#9333ea',
+];
+
+function hashText(text = '') {
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    hash = (hash * 31 + text.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+function getNodeColor(type?: string) {
+  const normalized = (type || 'Entity').trim().toLowerCase();
+  const fixedColors: Record<string, string> = {
+    person: '#dc2626',
+    organization: '#2563eb',
+    location: '#059669',
+    concept: '#d97706',
+    event: '#7c3aed',
+    entity: '#2563eb',
+  };
+  return (
+    fixedColors[normalized] ||
+    TYPE_COLORS[hashText(normalized) % TYPE_COLORS.length]
+  );
+}
+
+function truncateText(text: string, max = 18) {
+  if (!text) return '';
+  return text.length > max ? `${text.slice(0, max)}...` : text;
 }
 
 // ✅ 新增：绘制曲线箭头的函数
@@ -360,7 +409,35 @@ function InteractiveForceGraph({
     const { width, height } = canvasSize;
     ctx.clearRect(0, 0, width, height);
     ctx.save();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 0.6;
+    for (let x = 0; x < width; x += 32) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = 0; y < height; y += 32) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
+
     ctx.font = '12px sans-serif';
+
+    const selectedId = selectedNode?.id;
+    const neighborIds = new Set<number>();
+    if (selectedId !== undefined) {
+      data.links.forEach((link) => {
+        if (link.source === selectedId) neighborIds.add(link.target);
+        if (link.target === selectedId) neighborIds.add(link.source);
+      });
+    }
 
     // ✅ 边（曲线箭头）
     data.links.forEach((link) => {
@@ -370,14 +447,21 @@ function InteractiveForceGraph({
 
       const isHovered = hoveredEdge === link;
       const isSelected = selectedEdge === link;
+      const isRelatedToSelected =
+        selectedId === undefined ||
+        link.source === selectedId ||
+        link.target === selectedId;
 
       ctx.strokeStyle = isSelected
-        ? '#3b82f6'
+        ? '#2563eb'
         : isHovered
           ? '#60a5fa'
-          : '#cbd5e1';
+          : isRelatedToSelected
+            ? '#94a3b8'
+            : '#e2e8f0';
       ctx.fillStyle = ctx.strokeStyle;
-      ctx.lineWidth = isSelected ? 3 : isHovered ? 2 : 1.5;
+      ctx.globalAlpha = isRelatedToSelected ? 1 : 0.28;
+      ctx.lineWidth = isSelected ? 3 : isHovered ? 2 : 1.2;
 
       // 计算目标节点半径，让箭头停在节点边缘
       const targetRadius =
@@ -397,6 +481,21 @@ function InteractiveForceGraph({
 
       // 绘制曲线箭头
       drawCurvedArrow(ctx, s.x, s.y, endX, endY, 0.15);
+
+      if (isSelected || isHovered) {
+        const label = truncateText(link.relation, 16);
+        const midX = (s.x + t.x) / 2;
+        const midY = (s.y + t.y) / 2;
+        const textWidth = ctx.measureText(label).width;
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.fillRect(midX - textWidth / 2 - 6, midY - 11, textWidth + 12, 22);
+        ctx.fillStyle = '#334155';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, midX, midY);
+      }
+
+      ctx.globalAlpha = 1;
     });
 
     // 节点
@@ -406,29 +505,44 @@ function InteractiveForceGraph({
 
       const isHovered = hoveredNode === node.id;
       const isSelected = selectedNode?.id === node.id;
+      const isNeighbor = neighborIds.has(node.id);
+      const isDimmed = selectedId !== undefined && !isSelected && !isNeighbor;
       const radius = isSelected
         ? NODE_SELECTED_RADIUS
         : isHovered
           ? NODE_HOVER_RADIUS
-          : NODE_BASE_RADIUS;
+          : isNeighbor
+            ? NODE_HOVER_RADIUS
+            : NODE_BASE_RADIUS;
 
-      const colors: Record<string, string> = {
-        person: '#ef4444',
-        organization: '#3b82f6',
-        location: '#10b981',
-        concept: '#f59e0b',
-        event: '#8b5cf6',
-        entity: '#3b82f6', // 添加ENTITY类型的颜色
-      };
+      const nodeColor = getNodeColor(node.entity_type);
+      ctx.globalAlpha = isDimmed ? 0.28 : 1;
+
+      if (isSelected || isHovered) {
+        const glow = ctx.createRadialGradient(
+          pos.x,
+          pos.y,
+          radius,
+          pos.x,
+          pos.y,
+          radius + 18,
+        );
+        glow.addColorStop(0, `${nodeColor}55`);
+        glow.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, radius + 18, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = colors[node.entity_type?.toLowerCase()] || '#3b82f6';
+      ctx.fillStyle = nodeColor;
       ctx.fill();
       ctx.strokeStyle = isSelected
-        ? '#1e40af'
+        ? '#0f172a'
         : isHovered
-          ? '#2563eb'
+          ? '#1e293b'
           : 'white';
       ctx.lineWidth = isSelected ? 3 : 2;
       ctx.stroke();
@@ -439,7 +553,7 @@ function InteractiveForceGraph({
       const labelX = pos.x + radius + 6;
       const labelY = pos.y;
 
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = 'rgba(255,255,255,0.94)';
       ctx.fillRect(labelX - 4, labelY - 9, textWidth + 8, 18);
 
       ctx.fillStyle = '#1e293b';
@@ -448,6 +562,7 @@ function InteractiveForceGraph({
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(label, labelX, labelY);
+      ctx.globalAlpha = 1;
     });
 
     ctx.restore();
@@ -593,8 +708,7 @@ function DetailPanel({
     node.entity_type !== 'UNKNOWN' &&
     node.entity_type !== '未知';
 
-  const showPageRank =
-    typeof node?.pagerank === 'number' && Math.abs(node.pagerank - 1) > 1e-9;
+  const showPageRank = typeof node?.pagerank === 'number';
 
   const showEdgeDescription =
     !!edge?.description &&
@@ -615,9 +729,9 @@ function DetailPanel({
   if (!node && !edge) return null;
 
   return (
-    <div className="absolute top-4 right-4 w-80 bg-white rounded-lg shadow-lg border p-4 max-h-96 overflow-y-auto z-10">
+    <div className="absolute top-4 right-4 w-96 max-w-[calc(100%-2rem)] rounded-md border bg-white/95 p-4 shadow-xl backdrop-blur max-h-[calc(100%-2rem)] overflow-y-auto z-10">
       <div className="flex justify-between items-start mb-3">
-        <h3 className="font-semibold text-lg">
+        <h3 className="font-semibold text-base text-slate-900">
           {node ? '节点详情' : '关系详情'}
         </h3>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
@@ -626,53 +740,94 @@ function DetailPanel({
       </div>
 
       {node && (
-        <div className="space-y-2 text-sm">
+        <div className="space-y-3 text-sm">
           <div>
-            <span className="font-medium text-gray-600">实体名称：</span>
-            {node.entity_name}
+            <div className="text-xs text-gray-500">实体名称</div>
+            <div className="mt-1 font-medium text-slate-900">
+              {node.entity_name}
+            </div>
           </div>
 
           {showType && (
             <div>
-              <span className="font-medium text-gray-600">类型：</span>
-              {node.entity_type}
+              <div className="text-xs text-gray-500">类型</div>
+              <div className="mt-1 inline-flex items-center gap-2 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                <span
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: getNodeColor(node.entity_type) }}
+                />
+                {node.entity_type}
+              </div>
+            </div>
+          )}
+
+          {node.aliases && node.aliases.length > 0 && (
+            <div>
+              <div className="text-xs text-gray-500">别名</div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {node.aliases.map((alias) => (
+                  <span
+                    key={alias}
+                    className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
+                  >
+                    {alias}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
 
           {node.description && (
             <div>
-              <span className="font-medium text-gray-600">描述：</span>
-              {node.description}
+              <div className="text-xs text-gray-500">描述</div>
+              <p className="mt-1 whitespace-pre-wrap leading-6 text-slate-700">
+                {node.description}
+              </p>
             </div>
           )}
 
           {showPageRank && (
             <div>
-              <span className="font-medium text-gray-600">PageRank：</span>
+              <span className="font-medium text-gray-600">PageRank: </span>
               {node.pagerank.toFixed(4)}
             </div>
           )}
 
           {node.source?.length > 0 && (
             <div>
-              <span className="font-medium text-gray-600">来源：</span>
-              {node.source.join(', ')}
+              <div className="text-xs text-gray-500">来源</div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {node.source
+                  .filter((item) => item && item.trim())
+                  .map((item) => (
+                    <span
+                      key={item}
+                      className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+                    >
+                      {item}
+                    </span>
+                  ))}
+              </div>
             </div>
           )}
         </div>
       )}
 
       {edge && (
-        <div className="space-y-2 text-sm">
+        <div className="space-y-3 text-sm">
           <div>
-            <span className="font-medium text-gray-600">关系类型：</span>
-            {edge.relation}
+            <div className="text-xs text-gray-500">关系类型</div>
+            <div className="mt-1 font-medium text-slate-900">
+              {edge.relation}
+            </div>
           </div>
 
           {showEdgeDescription && (
             <div>
-              <span className="font-medium text-gray-600">描述：</span>
-              {edge.description}
+              <div className="text-xs text-gray-500">描述</div>
+              <p className="mt-1 whitespace-pre-wrap leading-6 text-slate-700">
+                {edge.description}
+              </p>
             </div>
           )}
 
@@ -684,18 +839,67 @@ function DetailPanel({
           )}
 
           <div>
-            <span className="font-medium text-gray-600">连接：</span>
-            {sourceName} → {targetName}
+            <div className="text-xs text-gray-500">连接</div>
+            <div className="mt-1 rounded bg-slate-50 px-3 py-2 text-slate-700">
+              {sourceName} → {targetName}
+            </div>
           </div>
+
+          {edge.source_detail?.length ? (
+            <div>
+              <div className="text-xs text-gray-500">来源</div>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {edge.source_detail
+                  .filter((item) => item && item.trim())
+                  .map((item) => (
+                    <span
+                      key={item}
+                      className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+                    >
+                      {item}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </div>
   );
 }
 
-export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
-  const queryClient = useQueryClient();
+function TypeLegend({ nodes }: { nodes: Node[] }) {
+  const types = useMemo(() => {
+    const counts = new Map<string, number>();
+    nodes.forEach((node) => {
+      const type = node.entity_type || 'Entity';
+      counts.set(type, (counts.get(type) || 0) + 1);
+    });
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  }, [nodes]);
 
+  if (!types.length) return null;
+
+  return (
+    <div className="absolute left-4 bottom-4 z-10 rounded-md border bg-white/90 px-3 py-2 text-xs text-slate-600 shadow-sm backdrop-blur">
+      <div className="mb-1 font-medium text-slate-800">类型</div>
+      <div className="flex max-w-[520px] flex-wrap gap-x-3 gap-y-1.5">
+        {types.map(([type, count]) => (
+          <div key={type} className="flex items-center gap-1.5">
+            <span
+              className="size-2.5 rounded-full"
+              style={{ backgroundColor: getNodeColor(type) }}
+            />
+            <span>{type}</span>
+            <span className="text-slate-400">{count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
   const [graphData, setGraphData] = useState<GraphData>(EMPTY_GRAPH);
   const [originalGraphData, setOriginalGraphData] =
     useState<GraphData>(EMPTY_GRAPH);
@@ -707,22 +911,45 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
   const [searchDepth, setSearchDepth] = useState('2');
   const [isSearching, setIsSearching] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [graphLoading, setGraphLoading] = useState(false);
 
-  const { data: knowledgeGraph, loading: graphLoading } =
-    useFetchKnowledgeGraph();
+  const fetchGraph = useCallback(async () => {
+    if (!kbId) return;
+
+    setGraphLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/v1/graph/${kbId}/knowledge_graph`, {
+        headers: {
+          [Authorization]: getAuthorization(),
+        },
+      });
+      const result = await res.json();
+      if (result.code === 0 && result.data?.graph) {
+        const graph = result.data.graph as GraphData;
+        setGraphData(graph);
+        setOriginalGraphData(graph);
+      } else {
+        setGraphData(EMPTY_GRAPH);
+        setOriginalGraphData(EMPTY_GRAPH);
+        setErrorMsg(result.message || result.msg || '图谱数据加载失败');
+      }
+    } catch (err) {
+      console.error(err);
+      setGraphData(EMPTY_GRAPH);
+      setOriginalGraphData(EMPTY_GRAPH);
+      setErrorMsg('网络错误，图谱数据加载失败');
+    } finally {
+      setGraphLoading(false);
+    }
+  }, [kbId]);
 
   /**
-   * ✅ 使用真实接口数据初始化图谱
+   * ✅ 从 Neo4j 初始化图谱
    */
   useEffect(() => {
-    const graph = knowledgeGraph?.graph;
-    if (graph && Array.isArray(graph.nodes) && Array.isArray(graph.edges)) {
-      setGraphData(graph);
-      // 只在首次加载真实图谱时保存一份原始数据
-      setOriginalGraphData((prev) => (prev.nodes.length === 0 ? graph : prev));
-    }
-    queryClient.invalidateQueries({ queryKey: ['fetchKnowledgeGraph'] });
-  }, [knowledgeGraph]);
+    fetchGraph();
+  }, [fetchGraph]);
 
   /**
    * id → entity_name 映射
@@ -746,7 +973,7 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
     try {
       const depthNum = Math.min(3, Math.max(1, Number(searchDepth)));
 
-      const res = await fetch(`/v1/kb/${kbId}/knowledge_graph/subgraph`, {
+      const res = await fetch(`/v1/graph/${kbId}/knowledge_graph/subgraph`, {
         method: 'POST',
         headers: {
           [Authorization]: getAuthorization(),
@@ -789,18 +1016,12 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
     setSelectedNode(null);
     setSelectedEdge(null);
     setGraphData(originalGraphData);
-    queryClient.invalidateQueries({
-      queryKey: ['fetchKnowledgeGraph'],
-    });
   };
 
   /**
    * 🔁 刷新真实图谱
    */
-  const handleRefreshGraph = () =>
-    queryClient.invalidateQueries({
-      queryKey: ['fetchKnowledgeGraph'],
-    });
+  const handleRefreshGraph = () => fetchGraph();
 
   const hasGraph = useMemo(
     () => graphData.nodes.length > 0 || graphData.edges.length > 0,
@@ -891,6 +1112,7 @@ export default function GraphDisplay({ kbId, kbData }: GraphDisplayProps) {
                 setSelectedEdge(null);
               }}
             />
+            <TypeLegend nodes={graphData.nodes} />
           </>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400 italic">

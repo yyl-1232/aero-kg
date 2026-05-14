@@ -1,4 +1,4 @@
-import time
+﻿import time
 
 from flask import Blueprint
 from flask_login import login_required, current_user
@@ -9,16 +9,38 @@ from api.db.services.file_service import FileService
 from api.utils.api_utils import server_error_response, get_data_error_result, validate_request, get_json_result, \
     token_required
 from api.utils import get_uuid
-from api.db import StatusEnum, FileType, FileSource
+from api.db import StatusEnum, FileType, FileSource, TenantPermission
 from api.db.services.knowledge_graph_service import KnowledgeGraphService
+from api.db.services.neo4j_service import Neo4jKnowledgeGraphService
+from api.db.services.user_service import UserTenantService
 from api.constants import DATASET_NAME_LIMIT
 from api.db.services import duplicate_name
 from rag.utils.storage_factory import STORAGE_IMPL
+from api.db.db_models import User
 
 manager = Blueprint("graph", __name__)
 from api.utils import current_timestamp, datetime_format
 from datetime import datetime
 from api.db.services import duplicate_name
+
+
+def _get_readable_graph(graph_id):
+    joined_tenant_ids = [
+        tenant.tenant_id
+        for tenant in UserTenantService.query(user_id=current_user.id)
+    ]
+    graphs = KnowledgeGraphService.model.select().where(
+        (KnowledgeGraphService.model.id == graph_id)
+        & (KnowledgeGraphService.model.status == "1")
+        & (
+            (KnowledgeGraphService.model.tenant_id == current_user.id)
+            | (
+                KnowledgeGraphService.model.tenant_id.in_(joined_tenant_ids)
+                & (KnowledgeGraphService.model.permission == TenantPermission.TEAM.value)
+            )
+        )
+    )
+    return graphs[0] if graphs else None
 
 @manager.route('/create', methods=['post'])
 @login_required
@@ -48,6 +70,8 @@ def create_graph():
         req["tenant_id"] = current_user.id
         req["created_by"] = current_user.id
         req["permission"] = req.get("permission", "me")
+        if req["permission"] not in {TenantPermission.ME.value, TenantPermission.TEAM.value}:
+            return get_data_error_result(message="Invalid graph permission.")
         req["node_num"] = 0
         req["edge_num"] = 0
         req["size"] = 0
@@ -62,9 +86,26 @@ def create_graph():
 @manager.route('/graph_list', methods=['post'])
 @login_required
 def list_graphs():
-    graphs = KnowledgeGraphService.query(
-        tenant_id=current_user.id,
-        status="1"
+    joined_tenant_ids = [
+        tenant.tenant_id
+        for tenant in UserTenantService.query(user_id=current_user.id)
+    ]
+    graphs = KnowledgeGraphService.model.select(
+        KnowledgeGraphService.model,
+        User.nickname,
+        User.avatar.alias("tenant_avatar"),
+    ).join(
+        User,
+        on=(KnowledgeGraphService.model.tenant_id == User.id),
+    ).where(
+        (
+            (
+                KnowledgeGraphService.model.tenant_id.in_(joined_tenant_ids)
+                & (KnowledgeGraphService.model.permission == TenantPermission.TEAM.value)
+            )
+            | (KnowledgeGraphService.model.tenant_id == current_user.id)
+        )
+        & (KnowledgeGraphService.model.status == "1")
     )
     graph_list = []
     if hasattr(graphs, 'dicts'):
@@ -116,9 +157,14 @@ def update_graph():
 
     graph = graphs[0]
     old_name = graph.name
+    permission = req.get("permission", graph.permission)
+    if permission not in {TenantPermission.ME.value, TenantPermission.TEAM.value}:
+        return get_data_error_result(message="Invalid graph permission.")
+
     update_data = {
         "name": graph_name,
         "description": req.get("description", graph.description),
+        "permission": permission,
         "update_time": current_timestamp(),
     }
 
@@ -148,7 +194,7 @@ def update_graph():
 @login_required
 def delete_graph(graph_id):
     try:
-        # 验证权限
+        # 楠岃瘉鏉冮檺
         graphs = KnowledgeGraphService.query(
             id=graph_id,
             tenant_id=current_user.id,
@@ -158,14 +204,14 @@ def delete_graph(graph_id):
         if not graphs or len(graphs) == 0:
             return get_data_error_result(message="Graph not found or no permission")
 
-            # 删除 .knowledgegraph 下的对应文件夹
+            # 鍒犻櫎 .knowledgegraph 涓嬬殑瀵瑰簲鏂囦欢澶?
         from api.db.services.file_service import FileService
         from api.utils import get_uuid
 
-        # 获取根文件夹
+        # 鑾峰彇鏍规枃浠跺す
         root_folder = FileService.get_root_folder(current_user.id)
 
-        # 查找 .knowledgegraph 文件夹
+        # 鏌ユ壘 .knowledgegraph 鏂囦欢澶?
         kg_folder = FileService.query(
             name=".knowledgegraph",
             parent_id=root_folder["id"],
@@ -174,7 +220,7 @@ def delete_graph(graph_id):
 
         if kg_folder:
             kg_folder = kg_folder[0]
-            # 查找对应的图谱文件夹
+            # 鏌ユ壘瀵瑰簲鐨勫浘璋辨枃浠跺す
             graph_folder = FileService.query(
                 name=graphs[0].name,
                 parent_id=kg_folder.id,
@@ -182,10 +228,12 @@ def delete_graph(graph_id):
             )
 
             if graph_folder:
-                # 级联删除图谱文件夹及其所有内容
+                # 绾ц仈鍒犻櫎鍥捐氨鏂囦欢澶瑰強鍏舵墍鏈夊唴瀹?
                 FileService.delete_folder_by_pf_id(current_user.id, graph_folder[0].id)
 
-                # 删除知识图谱
+                # 鍒犻櫎鐭ヨ瘑鍥捐氨
+        Neo4jKnowledgeGraphService.delete_graph(graph_id)
+
         if not KnowledgeGraphService.delete_by_id(graph_id):
             return get_data_error_result(message="Delete graph error")
 
@@ -199,62 +247,88 @@ def test():
     return get_json_result(data="Graph app is working")
 
 
+@manager.route('/<graph_id>', methods=['GET'])
+@login_required
+def get_graph_detail(graph_id):
+    graph = _get_readable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    try:
+        detail = KnowledgeGraphService.get_detail(graph_id)
+        if not detail:
+            return get_data_error_result(message="Graph not found")
+        return get_json_result(data=detail)
+    except Exception as e:
+        return server_error_response(e)
+
+
 @manager.route('/<graph_id>/upload_files', methods=['POST'])
 @login_required
 def upload_graph_files(graph_id):
-    from api.db.services.knowledge_graph_service import KnowledgeGraphService
-    from api.db.services.file_service import FileService
-    from api.utils import get_uuid
-    from rag.utils.storage_factory import STORAGE_IMPL
     import json
-    import time  # 需要导入time模块
 
     current_app.logger.warning(
         f"[UPLOAD_FILES] HIT graph_id={graph_id}, "
         f"method={request.method}, user={current_user.id}"
     )
 
-    # 验证图谱权限
     graph = KnowledgeGraphService.query(
         id=graph_id,
         tenant_id=current_user.id,
         status="1"
     )
-
     if not graph:
         return get_data_error_result(message="Graph not found or no permission")
 
     if 'files' not in request.files:
         return get_json_result(data=False, message='No files part!', code=400)
 
-    files = request.files.getlist('files')
-    uploaded_filenames = [file.filename for file in files if file.filename != '']
-    duplicate_files = []
-    seen_files = set()
+    files = [file for file in request.files.getlist('files') if file.filename]
+    if len(files) != 1:
+        return get_data_error_result(message="Please upload exactly one JSON knowledge graph file.")
 
-    for filename in uploaded_filenames:
-        if filename in seen_files:
-            duplicate_files.append(filename)
-        seen_files.add(filename)
+    upload_file = files[0]
+    if not upload_file.filename.lower().endswith(".json"):
+        return get_data_error_result(message="Only JSON files are allowed.")
 
-    if duplicate_files:
-        return get_data_error_result(
-            message=f"Duplicate files detected: {', '.join(set(duplicate_files))}. Each file type can only be uploaded once."
-        )
+    if graph[0].node_num > 0 or graph[0].edge_num > 0 or graph[0].file_ids:
+        return get_data_error_result(message="Knowledge graph file already exists.")
 
-    for file in files:
-        if file.filename == 'entities.json':
-            if graph[0].node_num > 0:
-                return get_data_error_result(message="Knowledge entity files already exist. Please delete them first.")
-        elif file.filename == 'relations.json':
-            if graph[0].edge_num > 0:
-                return get_data_error_result(
-                    message="Knowledge relation files already exist. Please delete them first.")
+    def validate_graph_payload(payload):
+        if not isinstance(payload, dict):
+            raise ValueError("JSON root must be an object with nodes and edges.")
+        nodes = payload.get("nodes")
+        edges = payload.get("edges")
+        if not isinstance(nodes, list):
+            raise ValueError("Field nodes must be an array.")
+        if not isinstance(edges, list):
+            raise ValueError("Field edges must be an array.")
+
+        node_ids = set()
+        for index, node in enumerate(nodes, start=1):
+            if not isinstance(node, dict):
+                raise ValueError(f"nodes[{index}] must be an object.")
+            for field in ["id", "entity_kwd"]:
+                if field not in node:
+                    raise ValueError(f"nodes[{index}] is missing required field: {field}.")
+            node_ids.add(str(node["id"]))
+
+        for index, edge in enumerate(edges, start=1):
+            if not isinstance(edge, dict):
+                raise ValueError(f"edges[{index}] must be an object.")
+            for field in ["head_entity_id", "tail_entity_id", "relation"]:
+                if field not in edge:
+                    raise ValueError(f"edges[{index}] is missing required field: {field}.")
+            if str(edge["head_entity_id"]) not in node_ids:
+                raise ValueError(f"edges[{index}] references missing head_entity_id: {edge['head_entity_id']}.")
+            if str(edge["tail_entity_id"]) not in node_ids:
+                raise ValueError(f"edges[{index}] references missing tail_entity_id: {edge['tail_entity_id']}.")
+
+        return nodes, edges
+
     try:
-        # 获取根文件夹
         root_folder = FileService.get_root_folder(current_user.id)
-
-        # 创建或获取.knowledgegraph文件夹
         kg_folder = FileService.query(
             name=".knowledgegraph",
             parent_id=root_folder["id"],
@@ -275,7 +349,6 @@ def upload_graph_files(graph_id):
         else:
             kg_folder = kg_folder[0]
 
-            # 创建图谱文件夹
         graph_folder = FileService.query(
             name=graph[0].name,
             parent_id=kg_folder.id,
@@ -296,77 +369,110 @@ def upload_graph_files(graph_id):
         else:
             graph_folder = graph_folder[0]
 
-        file_results = []
-        entities_data = None
-        relations_data = None
+        blob = upload_file.read()
+        try:
+            graph_payload = json.loads(blob.decode("utf-8-sig"))
+            nodes_data, edges_data = validate_graph_payload(graph_payload)
+        except UnicodeDecodeError:
+            return get_data_error_result(message="JSON file must be UTF-8 encoded.")
+        except json.JSONDecodeError as e:
+            return get_data_error_result(message=f"JSON parse failed: {e}")
+        except ValueError as e:
+            return get_data_error_result(message=str(e))
 
-        for file in files:
-            if file.filename == '':
-                continue
+        Neo4jKnowledgeGraphService.write_graph(graph_id, graph[0].name, nodes_data, edges_data)
 
-                # 验证文件类型
-            if file.filename not in ['entities.json', 'relations.json']:
-                return get_data_error_result(message="Only entities.json and relations.json files are allowed")
+        location = upload_file.filename
+        while STORAGE_IMPL.obj_exist(graph_folder.id, location):
+            location += "_"
+        STORAGE_IMPL.put(graph_folder.id, location, blob)
 
-                # 存储文件
-            location = file.filename
-            while STORAGE_IMPL.obj_exist(graph_folder.id, location):
-                location += "_"
-
-            blob = file.read()
-            STORAGE_IMPL.put(graph_folder.id, location, blob)
-
-            # 解析文件内容获取统计信息
-            try:
-                file_content = json.loads(blob.decode('utf-8'))
-                if file.filename == 'entities.json':
-                    entities_data = file_content
-                elif file.filename == 'relations.json':
-                    relations_data = file_content
-            except json.JSONDecodeError as e:
-                print(f"Error parsing {file.filename}: {e}")
-
-            file_record = {
-                "id": get_uuid(),
-                "parent_id": graph_folder.id,
-                "tenant_id": current_user.id,
-                "created_by": current_user.id,
-                "type": "json",
-                "name": file.filename,
-                "location": location,
-                "size": len(blob),
-                "source_type": FileSource.KNOWLEDGEGRAPH
-            }
-            file_record = FileService.insert(file_record)
-            file_results.append(file_record.to_json())
-
-            # 更新知识图谱统计信息
-        node_num = len(entities_data) if entities_data else graph[0].node_num  # 保留原有值
-        edge_num = len(relations_data) if relations_data else graph[0].edge_num  # 保留原有值
-
-        # 新增：收集文件ID列表
+        file_record = FileService.insert({
+            "id": get_uuid(),
+            "parent_id": graph_folder.id,
+            "tenant_id": current_user.id,
+            "created_by": current_user.id,
+            "type": "json",
+            "name": upload_file.filename,
+            "location": location,
+            "size": len(blob),
+            "source_type": FileSource.KNOWLEDGEGRAPH
+        })
+        file_results = [file_record.to_json()]
         uploaded_file_ids = [file["id"] for file in file_results]
-        current_file_ids = graph[0].file_ids or []  # 获取现有的file_ids，如果为空则使用空列表
-        all_file_ids = current_file_ids + uploaded_file_ids  # 合并现有文件ID和新上传的文件ID
+        current_file_ids = graph[0].file_ids or []
 
-        update_data = {
-            "node_num": node_num,
-            "edge_num": edge_num,
-            "file_ids": all_file_ids,  # 新增：更新file_ids字段
-            "update_time": int(time.time() * 1000)  # 当前时间戳
-        }
-
-        # 更新数据库
-        KnowledgeGraphService.update_by_id(graph_id, update_data)
+        KnowledgeGraphService.update_by_id(graph_id, {
+            "node_num": len(nodes_data),
+            "edge_num": len(edges_data),
+            "file_ids": current_file_ids + uploaded_file_ids,
+            "update_time": int(time.time() * 1000)
+        })
 
         return get_json_result(data=file_results)
     except Exception as e:
         return server_error_response(e)
 
+
+@manager.route('/<graph_id>/knowledge_graph', methods=['GET'])
+@login_required
+def get_neo4j_knowledge_graph(graph_id):
+    graph = _get_readable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    try:
+        graph_data = Neo4jKnowledgeGraphService.read_graph(graph_id)
+        return get_json_result(data={"graph": graph_data})
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/<graph_id>/knowledge_graph/subgraph', methods=['POST'])
+@login_required
+@validate_request("entity_name")
+def get_neo4j_subgraph(graph_id):
+    graph = _get_readable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    req = request.json
+    try:
+        subgraph = Neo4jKnowledgeGraphService.get_subgraph(
+            graph_id,
+            req["entity_name"],
+            int(req.get("depth", 2)),
+        )
+        return get_json_result(data={"subgraph": subgraph})
+    except Exception as e:
+        return server_error_response(e)
+
+
+@manager.route('/<graph_id>/knowledge_graph/retrieval_test', methods=['POST'])
+@login_required
+@validate_request("question")
+def neo4j_knowledge_graph_retrieval_test(graph_id):
+    graph = _get_readable_graph(graph_id)
+    if not graph:
+        return get_data_error_result(message="Graph not found or no permission")
+
+    req = request.json
+    try:
+        result = Neo4jKnowledgeGraphService.retrieval_test(
+            graph_id,
+            req["question"],
+            float(req.get("similarity_threshold", 0.3)),
+            int(req.get("subgraph_depth", 2)),
+        )
+        return get_json_result(data=result)
+    except Exception as e:
+        return server_error_response(e)
+
+
 @manager.route('/<graph_id>/files', methods=['GET'])
 @login_required
 def get_graph_files(graph_id):
-    """获取知识图谱关联的文件列表"""
+    """Get files associated with a knowledge graph."""
     graph = KnowledgeGraphService.get_by_id(graph_id)
     if not graph or not graph[1]:
         return get_data_error_result(message="Graph not found")
@@ -375,10 +481,11 @@ def get_graph_files(graph_id):
     files = DocumentService.get_by_ids(file_ids)
     return get_json_result(data=files)
 
+
 @manager.route('/<graph_id>/files/<file_id>', methods=['DELETE'])
 @login_required
 def remove_graph_file(graph_id, file_id):
-    """移除知识图谱中的文件关联"""
+    """Remove a file association from a knowledge graph."""
     graph = KnowledgeGraphService.get_by_id(graph_id)
     if not graph or not graph[1]:
         return get_data_error_result(message="Graph not found")
@@ -386,6 +493,12 @@ def remove_graph_file(graph_id, file_id):
     file_ids = graph[1].file_ids or []
     if file_id in file_ids:
         file_ids.remove(file_id)
-        KnowledgeGraphService.update_by_id(graph_id, {"file_ids": file_ids})
+        Neo4jKnowledgeGraphService.delete_graph(graph_id)
+        KnowledgeGraphService.update_by_id(graph_id, {
+            "file_ids": file_ids,
+            "node_num": 0 if not file_ids else graph[1].node_num,
+            "edge_num": 0 if not file_ids else graph[1].edge_num,
+            "update_time": current_timestamp(),
+        })
 
     return get_json_result(data=True)

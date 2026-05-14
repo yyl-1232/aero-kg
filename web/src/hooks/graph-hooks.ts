@@ -1,5 +1,8 @@
 import i18n from '@/locales/config';
-import graphService, { deleteGraph } from '@/services/graph-service';
+import graphService, {
+  deleteGraph,
+  getGraphDetail,
+} from '@/services/graph-service';
 import {
   useInfiniteQuery,
   useMutation,
@@ -130,6 +133,7 @@ export const useRenameKnowledgeGraph = () => {
       graph_id: string;
       name: string;
       description?: string;
+      permission?: string;
     }) => {
       const { data = {} } = await graphService.updateGraph(params);
       if (data.code === 0) {
@@ -158,7 +162,7 @@ export const useFetchKnowledgeGraphDetail = (graphId: string) => {
     queryKey: ['fetchKnowledgeGraphDetail', graphId],
     enabled: !!graphId,
     queryFn: async () => {
-      const { data } = await graphService.getGraphDetail(graphId);
+      const { data } = await getGraphDetail(graphId);
       return data?.data;
     },
   });

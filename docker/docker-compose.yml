@@ -6,6 +6,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      neo4j:
+        condition: service_healthy
     image: ${RAGFLOW_IMAGE}
     container_name: AeroKG-server
     ports:

@@ -152,17 +152,15 @@ export function ActionCell({
           )}
         </DropdownMenuContent>
       </DropdownMenu> */}
-      {record.source_type !== 'knowledgegraph' && (
-        <ConfirmDeleteDialog onOk={handleDelete}>
-          <Button
-            variant="transparent"
-            className="border-none hover:bg-bg-card text-text-primary"
-            size={'sm'}
-          >
-            <Trash2 />
-          </Button>
-        </ConfirmDeleteDialog>
-      )}
+      <ConfirmDeleteDialog onOk={handleDelete}>
+        <Button
+          variant="transparent"
+          className="border-none hover:bg-bg-card text-text-primary"
+          size={'sm'}
+        >
+          <Trash2 />
+        </Button>
+      </ConfirmDeleteDialog>
     </section>
   );
 }
