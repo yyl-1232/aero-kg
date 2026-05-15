@@ -5,6 +5,7 @@ SHELL ["/bin/bash", "-c"]
 
 ARG NEED_MIRROR=0
 ARG LIGHTEN=0
+ARG UV_HTTP_TIMEOUT=300
 ENV LIGHTEN=${LIGHTEN}
 
 WORKDIR /ragflow
@@ -153,16 +154,26 @@ COPY pyproject.toml uv.lock ./
 # https://github.com/astral-sh/uv/issues/10462
 # uv records index url into uv.lock but doesn't failover among multiple indexes
 RUN --mount=type=cache,id=ragflow_uv,target=/root/.cache/uv,sharing=locked \
+    export UV_HTTP_TIMEOUT=${UV_HTTP_TIMEOUT}; \
     if [ "$NEED_MIRROR" == "1" ]; then \
         sed -i 's|pypi.org|mirrors.aliyun.com/pypi|g' uv.lock; \
     else \
         sed -i 's|mirrors.aliyun.com/pypi|pypi.org|g' uv.lock; \
     fi; \
     if [ "$LIGHTEN" == "1" ]; then \
-        uv sync --python 3.10 --frozen; \
+        sync_cmd=(uv sync --python 3.10 --frozen); \
     else \
-        uv sync --python 3.10 --frozen --all-extras; \
-    fi
+        sync_cmd=(uv sync --python 3.10 --frozen --all-extras); \
+    fi; \
+    for i in 1 2 3; do \
+        "${sync_cmd[@]}" && break; \
+        if [ "$i" -eq 3 ]; then \
+            echo "uv sync failed after ${i} attempts"; \
+            exit 1; \
+        fi; \
+        echo "uv sync failed (attempt ${i}), retrying in 10s..."; \
+        sleep 10; \
+    done
 
 COPY web web
 COPY docs docs
