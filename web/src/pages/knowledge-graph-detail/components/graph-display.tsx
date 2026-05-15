@@ -38,6 +38,7 @@ interface Edge {
   source: number;
   target: number;
   relation: string;
+  relation_description?: string;
   description: string;
   weight: number;
   source_detail?: string[];
@@ -116,6 +117,16 @@ function uniqueNonEmpty(values: Array<string | undefined>) {
   );
 }
 
+function getEdgeDescription(edge?: Edge | null) {
+  const relationDescription = edge?.relation_description?.trim();
+  if (relationDescription) return relationDescription;
+
+  const description = edge?.description?.trim();
+  if (!description || description === edge?.relation?.trim()) return '';
+
+  return description;
+}
+
 function mergeEdgesForDisplay(edges: Edge[]) {
   const groups = new Map<string, Edge[]>();
 
@@ -134,7 +145,7 @@ function mergeEdgesForDisplay(edges: Edge[]) {
 
     const [first] = group;
     const relations = uniqueNonEmpty(group.map((edge) => edge.relation));
-    const descriptions = uniqueNonEmpty(group.map((edge) => edge.description));
+    const descriptions = uniqueNonEmpty(group.map(getEdgeDescription));
     const sourceDetails = uniqueNonEmpty(
       group.flatMap((edge) => edge.source_detail || []),
     );
@@ -147,6 +158,7 @@ function mergeEdgesForDisplay(edges: Edge[]) {
       ...first,
       id: `merged:${key}`,
       relation: relations.join(' / '),
+      relation_description: descriptions.join('\n'),
       description: descriptions.join('\n'),
       source_detail: sourceDetails,
       weight: totalWeight / group.length,
@@ -585,7 +597,7 @@ function InteractiveForceGraph({
       // 绘制曲线箭头
       drawCurvedArrow(ctx, s.x, s.y, endX, endY, curvature);
 
-      if (isSelected || isHovered || link.mergedEdges) {
+      if (isSelected || isHovered) {
         const label = truncateText(link.relation, link.mergedEdges ? 32 : 16);
         const control = getQuadraticControlPoint(
           s.x,
@@ -800,11 +812,11 @@ function InteractiveForceGraph({
       }
     } else {
       const node = getNodeAt(x, y);
+      const edge = node ? null : getEdgeAt(x, y);
       setHoveredNode(node?.id || null);
-      if (!node) setHoveredEdge(getEdgeAt(x, y));
+      setHoveredEdge(edge);
       const canvas = canvasRef.current;
-      if (canvas)
-        canvas.style.cursor = node || hoveredEdge ? 'pointer' : 'default';
+      if (canvas) canvas.style.cursor = node || edge ? 'pointer' : 'default';
     }
   };
 
@@ -854,15 +866,7 @@ function DetailPanel({
 
   const showPageRank = typeof node?.pagerank === 'number';
 
-  const showEdgeDescription =
-    !!edge?.description &&
-    !!edge?.relation &&
-    edge.description.trim() !== '' &&
-    edge.description.trim() !== edge.relation.trim();
-
-  const showEdgeWeight =
-    typeof edge?.weight === 'number' && Math.abs(edge.weight - 2) > 1e-9;
-  const mergedEdges = edge?.mergedEdges || [];
+  const edgeDescription = getEdgeDescription(edge);
 
   const sourceName = edge
     ? (nodeNameById.get(edge.source) ?? `节点 ${edge.source}`)
@@ -967,47 +971,21 @@ function DetailPanel({
             </div>
           </div>
 
-          {mergedEdges.length > 1 && (
-            <div>
-              <div className="text-xs text-gray-500">展示方式</div>
-              <div className="mt-1 text-slate-700">
-                已合并展示 {mergedEdges.length} 条同向关系，底层仍保留独立记录。
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {mergedEdges.map((item, index) => (
-                  <span
-                    key={item.id || `${item.source}-${item.target}-${index}`}
-                    className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
-                  >
-                    {item.relation}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {showEdgeDescription && (
-            <div>
-              <div className="text-xs text-gray-500">描述</div>
-              <p className="mt-1 whitespace-pre-wrap leading-6 text-slate-700">
-                {edge.description}
-              </p>
-            </div>
-          )}
-
-          {showEdgeWeight && (
-            <div>
-              <span className="font-medium text-gray-600">权重：</span>
-              {edge.weight.toFixed(2)}
-            </div>
-          )}
-
           <div>
             <div className="text-xs text-gray-500">连接</div>
             <div className="mt-1 rounded bg-slate-50 px-3 py-2 text-slate-700">
               {sourceName} → {targetName}
             </div>
           </div>
+
+          {edgeDescription && (
+            <div>
+              <div className="text-xs text-gray-500">描述</div>
+              <p className="mt-1 whitespace-pre-wrap leading-6 text-slate-700">
+                {edgeDescription}
+              </p>
+            </div>
+          )}
 
           {edge.source_detail?.length ? (
             <div>

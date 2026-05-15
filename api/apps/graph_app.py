@@ -151,7 +151,7 @@ def _current_graph_export_payload(graph_data):
                 "head_entity_id": edge.get("source"),
                 "tail_entity_id": edge.get("target"),
                 "relation": edge.get("relation") or "",
-                "description": edge.get("description") or edge.get("relation") or "",
+                "description": edge.get("relation_description") or edge.get("description") or edge.get("relation") or "",
                 "source": edge.get("source_detail") or [],
             }
             for edge in graph_data.get("edges", [])

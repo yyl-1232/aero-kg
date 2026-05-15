@@ -122,7 +122,7 @@ class Neo4jKnowledgeGraphService:
                 "head_entity_id": str(edge["head_entity_id"]),
                 "tail_entity_id": str(edge["tail_entity_id"]),
                 "relation": str(edge["relation"]),
-                "description": cls._as_text(edge.get("description") or edge["relation"]),
+                "description": cls._as_text(edge.get("relation_description") or edge.get("description") or edge["relation"]),
                 "weight": float(edge.get("weight") or 1),
                 "source": cls._as_list(edge.get("source")),
             }
@@ -564,7 +564,7 @@ class Neo4jKnowledgeGraphService:
             "source": str(edge.get("source") or edge.get("head_entity_id") or "").strip(),
             "target": str(edge.get("target") or edge.get("tail_entity_id") or "").strip(),
             "relation": str(edge.get("relation") or "").strip(),
-            "description": cls._as_text(edge.get("description") or edge.get("relation")),
+            "description": cls._as_text(edge.get("relation_description") or edge.get("description") or edge.get("relation")),
             "weight": float(edge.get("weight") or 1),
             "source_detail": cls._as_list(edge.get("source_detail")),
         }
