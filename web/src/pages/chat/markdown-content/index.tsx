@@ -1,10 +1,15 @@
 import Image from '@/components/image';
+import { KnowledgeGraphReferencePreview } from '@/components/knowledge-graph-reference-preview';
+import {
+  getReferenceSourceKind,
+  ReferenceSourceIcon,
+} from '@/components/reference-source-icon';
 import SvgIcon from '@/components/svg-icon';
 import { IReference, IReferenceChunk } from '@/interfaces/database/chat';
 import { getExtension } from '@/utils/document-util';
-import { InfoCircleOutlined } from '@ant-design/icons';
 import { Button, Flex, Popover } from 'antd';
 import DOMPurify from 'dompurify';
+import { Network } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import Markdown from 'react-markdown';
 import reactStringReplace from 'react-string-replace';
@@ -33,6 +38,52 @@ import { pipe } from 'lodash/fp';
 import styles from './index.less';
 
 const getChunkIndex = (match: string) => Number(match);
+
+const isKnowledgeGraphReference = (chunk?: IReferenceChunk) =>
+  chunk?.source_type === 'knowledge_graph' ||
+  chunk?.document_id?.startsWith('kg-');
+
+const formatKgSummary = (chunk?: IReferenceChunk) => {
+  const nodeCount = chunk?.kg_node_num ?? 0;
+  const edgeCount = chunk?.kg_edge_num ?? 0;
+  return `${nodeCount} 个节点 · ${edgeCount} 条关系`;
+};
+
+const formatKgEntitySource = (chunk?: IReferenceChunk) => {
+  const entityName =
+    chunk?.kg_entity_name ||
+    chunk?.document_name?.replace(/^Knowledge Graph\s*-\s*/i, '');
+  const entityType = chunk?.kg_entity_type;
+  return entityType ? `${entityName} (${entityType})` : entityName;
+};
+
+const isPlaceholderKgName = (name?: string) =>
+  !name ||
+  ['Unknown', 'Knowledge Graph', 'knowledge_graph'].includes(name.trim());
+
+const getKgGraphName = (chunk?: IReferenceChunk, documentName?: string) => {
+  const candidates = [
+    chunk?.kg_name,
+    documentName,
+    chunk?.kg_entity_name,
+    chunk?.document_name?.replace(/^Knowledge Graph\s*-\s*/i, ''),
+  ];
+  return (
+    candidates.find((item) => item && !isPlaceholderKgName(item)) ||
+    candidates.find(Boolean) ||
+    'Knowledge Graph'
+  );
+};
+
+const getKgGraphId = (chunk?: IReferenceChunk) =>
+  chunk?.kg_id || chunk?.document_id?.replace(/^kg-/, '');
+
+const openKnowledgeGraph = (graphId?: string) => {
+  if (graphId) {
+    window.open(`/knowledge-graph/${graphId}`, '_blank');
+  }
+};
+
 // TODO: The display of the table is inconsistent with the display previously placed in the MessageItem.
 const MarkdownContent = ({
   reference,
@@ -156,13 +207,46 @@ const MarkdownContent = ({
             </Popover>
           )}
           <div className={'space-y-2 max-w-[40vw]'}>
-            <div
-              dangerouslySetInnerHTML={{
-                __html: DOMPurify.sanitize(chunkItem?.content ?? ''),
-              }}
-              className={classNames(styles.chunkContentText)}
-            ></div>
-            {documentId && (
+            {isKnowledgeGraphReference(chunkItem) ? (
+              <KnowledgeGraphReferencePreview content={chunkItem?.content} />
+            ) : (
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: DOMPurify.sanitize(chunkItem?.content ?? ''),
+                }}
+                className={classNames(styles.chunkContentText)}
+              ></div>
+            )}
+            {isKnowledgeGraphReference(chunkItem) && (
+              <div
+                className={styles.kgReferenceSummary}
+                role="button"
+                tabIndex={0}
+                title="Open knowledge graph"
+                onClick={() => openKnowledgeGraph(getKgGraphId(chunkItem))}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    openKnowledgeGraph(getKgGraphId(chunkItem));
+                  }
+                }}
+              >
+                <div className={styles.kgReferenceSourceLabel}>来源</div>
+                <div className={styles.kgReferenceTitle}>
+                  <Network size={16} />
+                  <span>命中实体：{formatKgEntitySource(chunkItem)}</span>
+                </div>
+                {chunkItem?.kg_entity_description && (
+                  <div className={styles.kgReferenceDescription}>
+                    {chunkItem.kg_entity_description}
+                  </div>
+                )}
+                <div className={styles.kgReferenceMeta}>
+                  来源图谱：{getKgGraphName(chunkItem, document?.doc_name)} ·{' '}
+                  {formatKgSummary(chunkItem)}
+                </div>
+              </div>
+            )}
+            {documentId && !isKnowledgeGraphReference(chunkItem) && (
               <Flex gap={'small'}>
                 {fileThumbnail ? (
                   <img
@@ -202,8 +286,14 @@ const MarkdownContent = ({
       let replacedText = reactStringReplace(text, currentReg, (match, i) => {
         const chunkIndex = getChunkIndex(match);
 
-        const { documentUrl, fileExtension, imageId, chunkItem, documentId } =
-          getReferenceInfo(chunkIndex);
+        const {
+          documentUrl,
+          fileExtension,
+          imageId,
+          chunkItem,
+          documentId,
+          document,
+        } = getReferenceInfo(chunkIndex);
 
         const docType = chunkItem?.doc_type;
 
@@ -222,9 +312,42 @@ const MarkdownContent = ({
                 : () => {}
             }
           ></Image>
+        ) : getReferenceSourceKind(chunkItem, document) ===
+          'knowledge_graph' ? (
+          <Popover
+            content={getPopoverContent(chunkIndex)}
+            key={i}
+            trigger={['hover', 'click']}
+          >
+            <button
+              type="button"
+              className={styles.referenceSourceButton}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <ReferenceSourceIcon
+                chunk={chunkItem}
+                document={document}
+                className={styles.referenceSourceIcon}
+              />
+            </button>
+          </Popover>
         ) : (
-          <Popover content={getPopoverContent(chunkIndex)} key={i}>
-            <InfoCircleOutlined className={styles.referenceIcon} />
+          <Popover
+            content={getPopoverContent(chunkIndex)}
+            key={i}
+            trigger={['hover', 'click']}
+          >
+            <button
+              type="button"
+              className={styles.referenceSourceButton}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <ReferenceSourceIcon
+                chunk={chunkItem}
+                document={document}
+                className={styles.referenceSourceIcon}
+              />
+            </button>
           </Popover>
         );
       });

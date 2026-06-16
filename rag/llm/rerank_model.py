@@ -451,21 +451,50 @@ class BaiduYiyanRerank(Base):
     _FACTORY_NAME = "BaiduYiyan"
 
     def __init__(self, key, model_name, base_url=None):
-        from qianfan.resources import Reranker
-
-        key = json.loads(key)
-        ak = key.get("yiyan_ak", "")
-        sk = key.get("yiyan_sk", "")
-        self.client = Reranker(ak=ak, sk=sk)
         self.model_name = model_name
+        self.base_url = base_url
+        self.api_key = key
+
+        if base_url:
+            # Use OpenAI-compatible API mode
+            if base_url.find("/rerank") == -1:
+                self.base_url = urljoin(base_url, "/rerank")
+            else:
+                self.base_url = base_url
+            self.headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+            }
+        else:
+            # Use QianFan native SDK mode
+            from qianfan.resources import Reranker
+
+            try:
+                key_dict = json.loads(key)
+                ak = key_dict.get("yiyan_ak", "")
+                sk = key_dict.get("yiyan_sk", "")
+                self.client = Reranker(ak=ak, sk=sk)
+            except (json.JSONDecodeError, TypeError):
+                self.client = Reranker(access_key=key)
 
     def similarity(self, query: str, texts: list):
-        res = self.client.do(
-            model=self.model_name,
-            query=query,
-            documents=texts,
-            top_n=len(texts),
-        ).body
+        if self.base_url:
+            # OpenAI-compatible API mode
+            data = {
+                "model": self.model_name,
+                "query": query,
+                "documents": texts,
+                "top_n": len(texts),
+            }
+            res = requests.post(self.base_url, headers=self.headers, json=data).json()
+        else:
+            # QianFan native SDK mode
+            res = self.client.do(
+                model=self.model_name,
+                query=query,
+                documents=texts,
+                top_n=len(texts),
+            ).body
         rank = np.zeros(len(texts), dtype=float)
         try:
             for d in res["results"]:
@@ -474,6 +503,62 @@ class BaiduYiyanRerank(Base):
             log_exception(_e, res)
         return rank, self.total_token_count(res)
 
+
+class QianFanRerank(Base):
+    _FACTORY_NAME = "QianFan"
+
+    """
+    Stable QianFan Rerank Client (HTTP version)
+    """
+
+    def __init__(self, key, model_name, base_url=None):
+        self.model_name = model_name
+        self.api_key = key
+
+        self.base_url = self._normalize_base_url(base_url)
+        self.endpoint = urljoin(self.base_url + "/", "rerank")
+
+        self.headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        }
+
+    @staticmethod
+    def _normalize_base_url(base_url):
+        base_url = (base_url or "https://qianfan.baidubce.com/v2").rstrip("/")
+        for suffix in ("/chat/completions", "/embeddings", "/rerank"):
+            if base_url.endswith(suffix):
+                base_url = base_url[: -len(suffix)].rstrip("/")
+        if base_url == "https://qianfan.baidubce.com":
+            base_url = urljoin(base_url + "/", "v2")
+        return base_url
+
+    def similarity(self, query: str, texts: list):
+        payload = {
+            "model": self.model_name,
+            "query": query,
+            "documents": texts,
+            "top_n": len(texts),
+        }
+
+        resp = requests.post(
+            self.endpoint,
+            headers=self.headers,
+            json=payload,
+            timeout=60,
+        )
+        resp.raise_for_status()
+
+        data = resp.json()
+        if "results" not in data:
+            raise RuntimeError(f"Rerank API failed: {data}")
+
+        rank = np.zeros(len(texts), dtype=float)
+
+        for d in data["results"]:
+            rank[d["index"]] = d["relevance_score"]
+
+        return rank, data.get("usage", {}).get("total_tokens", 0)
 
 class VoyageRerank(Base):
     _FACTORY_NAME = "Voyage AI"

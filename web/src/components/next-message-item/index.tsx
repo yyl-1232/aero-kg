@@ -30,9 +30,7 @@ import { ReferenceDocumentList } from './reference-document-list';
 import { UploadedMessageFiles } from './uploaded-message-files';
 
 interface IProps
-  extends Partial<IRemoveMessageById>,
-    IRegenerateMessage,
-    PropsWithChildren {
+  extends Partial<IRemoveMessageById>, IRegenerateMessage, PropsWithChildren {
   item: IMessage;
   conversationId?: string;
   currentEventListWithoutMessageById?: (messageId: string) => INodeEvent[];
@@ -239,6 +237,7 @@ function MessageItem({
             {isAssistant && referenceDocuments.length > 0 && (
               <ReferenceDocumentList
                 list={referenceDocuments}
+                chunks={reference?.chunks}
               ></ReferenceDocumentList>
             )}
 

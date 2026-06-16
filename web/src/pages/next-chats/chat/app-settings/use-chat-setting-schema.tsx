@@ -30,6 +30,7 @@ export function useChatSettingSchema() {
         optional: z.boolean(),
       }),
     ),
+    tavily_enabled: z.boolean().optional(),
     tavily_api_key: z.string().optional(),
   });
 

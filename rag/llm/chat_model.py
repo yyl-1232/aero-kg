@@ -1150,14 +1150,24 @@ class BaiduYiyanChat(Base):
     _FACTORY_NAME = "BaiduYiyan"
 
     def __init__(self, key, model_name, base_url=None, **kwargs):
-        super().__init__(key, model_name, base_url=base_url, **kwargs)
+        self._use_openai_api = False
+        if base_url:
+            # Use OpenAI-compatible API mode
+            self._use_openai_api = True
+            super().__init__(key, model_name, base_url=base_url, **kwargs)
+        else:
+            # Use QianFan native SDK mode
+            super().__init__(key, model_name, base_url=base_url, **kwargs)
 
-        import qianfan
+            import qianfan
 
-        key = json.loads(key)
-        ak = key.get("yiyan_ak", "")
-        sk = key.get("yiyan_sk", "")
-        self.client = qianfan.ChatCompletion(ak=ak, sk=sk)
+            try:
+                key_dict = json.loads(key)
+                ak = key_dict.get("yiyan_ak", "")
+                sk = key_dict.get("yiyan_sk", "")
+                self.client = qianfan.ChatCompletion(ak=ak, sk=sk)
+            except (json.JSONDecodeError, TypeError):
+                self.client = qianfan.ChatCompletion(access_key=key)
         self.model_name = model_name.lower()
 
     def _clean_conf(self, gen_conf):
@@ -1192,6 +1202,25 @@ class BaiduYiyanChat(Base):
             return ans + "\n**ERROR**: " + str(e), 0
 
         yield total_tokens
+
+
+class QianFanChat(Base):
+    _FACTORY_NAME = "QianFan"
+
+    def __init__(self, key, model_name, base_url=None, **kwargs):
+
+        self.model_name = model_name.lower()
+        base_url = (base_url or "https://qianfan.baidubce.com/v2").rstrip("/")
+        for suffix in ("/chat/completions", "/embeddings", "/rerank"):
+            if base_url.endswith(suffix):
+                base_url = base_url[: -len(suffix)].rstrip("/")
+        if base_url == "https://qianfan.baidubce.com":
+            base_url = urljoin(base_url + "/", "v2")
+        self.client = OpenAI(
+            api_key=key,
+            base_url=base_url
+        )
+        super().__init__(key, model_name, base_url=base_url, **kwargs)
 
 
 class GoogleChat(Base):

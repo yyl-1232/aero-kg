@@ -110,6 +110,12 @@ class TenantLLMService(CommonService):
             model_config = cls.get_api_key(tenant_id, mdlnm)
         if model_config:
             model_config = model_config.to_dict()
+            if llm_type == LLMType.IMAGE2TEXT.value and model_config.get("model_type") != LLMType.IMAGE2TEXT.value:
+                raise LookupError(
+                    "Model({}) is configured as {}, but image2text requires an image2text model.".format(
+                        mdlnm, model_config.get("model_type") or "unknown"
+                    )
+                )
             llm = LLMService.query(llm_name=mdlnm) if not fid else LLMService.query(llm_name=mdlnm, fid=fid)
             if not llm and fid:  # for some cases seems fid mismatch
                 llm = LLMService.query(llm_name=mdlnm)

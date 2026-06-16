@@ -1086,7 +1086,11 @@ class RAGFlowPdfParser:
 
         async def __img_ocr_launcher():
             def __ocr_preprocess():
-                chars = self.page_chars[i] if not self.is_english else []
+                # Prefer the PDF text layer whenever it exists.  English-heavy
+                # technical PDFs often contain italic Latin text that OCR
+                # misreads as CJK lookalikes, so do not drop chars merely
+                # because the page is classified as English.
+                chars = self.page_chars[i]
                 self.mean_height.append(
                     np.median(sorted([c["height"] for c in chars])) if chars else 0
                 )

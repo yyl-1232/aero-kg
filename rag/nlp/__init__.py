@@ -16,6 +16,7 @@
 
 import logging
 import random
+import unicodedata
 from collections import Counter
 
 from rag.utils import num_tokens_from_string
@@ -28,6 +29,39 @@ from cn2an import cn2an
 from PIL import Image
 
 import chardet
+
+OCR_LATIN_CONFUSABLES = str.maketrans({
+    "犃": "A",
+    "犘": "P",
+    "犆": "C",
+    "犪": "a",
+    "犫": "b",
+    "犮": "c",
+    "犱": "d",
+    "犲": "e",
+    "犳": "f",
+    "犺": "h",
+    "犻": "i",
+    "犾": "l",
+    "犿": "m",
+    "狀": "n",
+    "狅": "o",
+    "狆": "p",
+    "狇": "q",
+    "狉": "r",
+    "狊": "s",
+    "狋": "t",
+    "狌": "u",
+    "狏": "v",
+    "狔": "y",
+})
+
+
+def normalize_extracted_text(text):
+    if not isinstance(text, str):
+        return text
+    text = unicodedata.normalize("NFKC", text)
+    return text.translate(OCR_LATIN_CONFUSABLES)
 
 all_codecs = [
     'utf-8', 'gb2312', 'gbk', 'utf_16', 'ascii', 'big5', 'big5hkscs',
@@ -258,6 +292,7 @@ def is_chinese(text):
 
 
 def tokenize(d, t, eng):
+    t = normalize_extracted_text(t)
     d["content_with_weight"] = t
     t = re.sub(r"</?(table|td|caption|tr|th)( [^<>]{0,12})?>", " ", t)
     d["content_ltks"] = rag_tokenizer.tokenize(t)
@@ -308,7 +343,6 @@ def tokenize_table(tbls, doc, eng, batch_size=10):
         if isinstance(rows, str):
             d = copy.deepcopy(doc)
             tokenize(d, rows, eng)
-            d["content_with_weight"] = rows
             if img:
                 d["image"] = img
                 d["doc_type_kwd"] = "image"

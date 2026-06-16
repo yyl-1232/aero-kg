@@ -138,13 +138,22 @@ class Neo4jKnowledgeGraphService:
     @classmethod
     def read_graph(cls, graph_id):
         if not cls.is_enabled():
-            return {"nodes": [], "edges": []}
+            return {"name": "", "nodes": [], "edges": []}
 
         conf = cls._config()
         with cls._driver() as driver:
             if not driver:
-                return {"nodes": [], "edges": []}
+                return {"name": "", "nodes": [], "edges": []}
             with driver.session(database=conf["database"]) as session:
+                graph_record = session.run(
+                    """
+                    MATCH (g:KnowledgeGraph {id: $graph_id})
+                    RETURN g.name AS name
+                    LIMIT 1
+                    """,
+                    graph_id=graph_id,
+                ).single()
+                graph_name = graph_record["name"] if graph_record else ""
                 nodes = [
                     cls._format_node(dict(record["n"]))
                     for record in session.run(
@@ -174,7 +183,7 @@ class Neo4jKnowledgeGraphService:
                     )
                 ]
                 cls._apply_degree_rank(nodes, edges)
-        return {"nodes": nodes, "edges": edges}
+        return {"name": graph_name, "nodes": nodes, "edges": edges}
 
     @classmethod
     def _apply_degree_rank(cls, nodes, edges):
@@ -361,6 +370,46 @@ class Neo4jKnowledgeGraphService:
         ]
         return {"nodes": sub_nodes, "edges": sub_edges}
 
+    @staticmethod
+    def _build_node_chunks(graph_id, matched_entities, relationship_map_by_entity):
+        chunks = []
+        for entity in matched_entities:
+            entity_relationships = relationship_map_by_entity.get(entity["id"], [])
+            rel_text = "\n".join(
+                f"Relation: {rel['source']} -> {rel['target']} ({rel.get('relation')})"
+                + (f" - {rel.get('description')}" if rel.get("description") else "")
+                for rel in entity_relationships
+            )
+            content = (
+                "Knowledge Graph node retrieval result:\n"
+                f"Entity: {entity['entity_name']}\n"
+                f"Type: {entity.get('entity_type') or ''}\n"
+                f"Similarity: {entity.get('similarity', 0)}\n"
+                f"Description: {entity.get('description') or ''}"
+            )
+            if rel_text:
+                content += f"\nRelated relationships:\n{rel_text}"
+            chunk_id = get_uuid()
+            chunks.append({
+                "chunk_id": chunk_id,
+                "content_ltks": "",
+                "content_with_weight": content,
+                "doc_id": f"kg-{graph_id}",
+                "docnm_kwd": f"Knowledge Graph - {entity.get('entity_name') or chunk_id}",
+                "kb_id": [],
+                "important_kwd": [],
+                "image_id": "",
+                "similarity": entity.get("similarity", 0),
+                "vector_similarity": entity.get("similarity", 0),
+                "term_similarity": 0,
+                "vector": [],
+                "positions": [],
+                "entity": entity,
+                "relationships": entity_relationships,
+                "source_type": "knowledge_graph",
+            })
+        return chunks
+
     @classmethod
     def retrieval_test(cls, graph_id, question, similarity_threshold=0.3, subgraph_depth=2):
         graph = cls.read_graph(graph_id)
@@ -368,8 +417,10 @@ class Neo4jKnowledgeGraphService:
         if not nodes:
             return {
                 "content_with_weight": "",
+                "graph_name": graph.get("name") or "",
                 "entities": [],
                 "relationships": [],
+                "chunks": [],
                 "chunk_id": get_uuid(),
                 "doc_id": "",
                 "docnm_kwd": "Knowledge Graph",
@@ -394,13 +445,17 @@ class Neo4jKnowledgeGraphService:
             if node.get("similarity", 0) >= similarity_threshold
         ]
 
+        matched_entities.sort(key=lambda item: item.get("similarity", 0), reverse=True)
+
         relationship_map = {}
+        relationship_map_by_entity = {}
         for entity in matched_entities:
             subgraph = cls.get_subgraph(graph_id, entity["entity_name"], subgraph_depth)
             name_by_id = {node["id"]: node["entity_name"] for node in subgraph.get("nodes", [])}
+            entity_relationships = {}
             for edge in subgraph.get("edges", []):
                 key = (edge["source"], edge["target"], edge.get("relation"))
-                relationship_map[key] = {
+                relationship = {
                     "source_id": edge["source"],
                     "target_id": edge["target"],
                     "source": name_by_id.get(edge["source"], str(edge["source"])),
@@ -409,8 +464,16 @@ class Neo4jKnowledgeGraphService:
                     "relation": edge.get("relation"),
                     "weight": edge.get("weight", 0),
                 }
+                relationship_map[key] = relationship
+                entity_relationships[key] = relationship
+            relationship_map_by_entity[entity["id"]] = sorted(
+                entity_relationships.values(),
+                key=lambda rel: rel.get("weight", 0) or 0,
+                reverse=True,
+            )
 
         relationships = list(relationship_map.values())
+        chunks = cls._build_node_chunks(graph_id, matched_entities, relationship_map_by_entity)
         entities_text = "\n".join(
             f"实体: {entity['entity_name']} (类型: {entity['entity_type']}, 相似度: {entity['similarity']}) - {entity['description']}"
             for entity in matched_entities
@@ -422,8 +485,12 @@ class Neo4jKnowledgeGraphService:
 
         return {
             "content_with_weight": f"知识图谱检索结果:\n\n{entities_text}\n\n{relationships_text}",
+            "graph_name": graph.get("name") or "",
             "entities": matched_entities,
             "relationships": relationships,
+            "graph_nodes": nodes,
+            "graph_edges": graph.get("edges", []),
+            "chunks": chunks,
             "chunk_id": get_uuid(),
             "doc_id": "",
             "docnm_kwd": "Knowledge Graph",

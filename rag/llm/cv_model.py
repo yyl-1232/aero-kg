@@ -248,6 +248,140 @@ class StepFunCV(GptV4):
         Base.__init__(self, **kwargs)
 
 
+class QianFanCV(Base):
+    _FACTORY_NAME = "QianFan"
+
+    """
+    Stable QianFan Vision Client (HTTP version, no SDK dependency)
+    """
+
+    def __init__(self, key, model_name, lang="Chinese", base_url=None, **kwargs):
+        self.model_name = model_name
+        self.lang = lang
+        self.api_key = key
+
+        # Keep the base URL at the API root; append the chat path once here.
+        self.base_url = self._normalize_base_url(base_url)
+        self.endpoint = urljoin(self.base_url + "/", "chat/completions")
+
+        self.headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        }
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def _normalize_base_url(base_url):
+        base_url = (base_url or "https://qianfan.baidubce.com/v2").rstrip("/")
+        for suffix in ("/chat/completions", "/embeddings", "/rerank"):
+            if base_url.endswith(suffix):
+                base_url = base_url[: -len(suffix)].rstrip("/")
+        if base_url == "https://qianfan.baidubce.com":
+            base_url = urljoin(base_url + "/", "v2")
+        return base_url
+
+    # -----------------------------
+    # image encode
+    # -----------------------------
+    @staticmethod
+    def image2base64(image):
+        if isinstance(image, bytes):
+            b64 = base64.b64encode(image).decode("utf-8")
+            return f"data:image/png;base64,{b64}"
+
+        if isinstance(image, BytesIO):
+            data = image.getvalue()
+            b64 = base64.b64encode(data).decode("utf-8")
+            return f"data:image/png;base64,{b64}"
+
+        # PIL Image
+        buffered = BytesIO()
+        try:
+            image.save(buffered, format="JPEG")
+            mime = "image/jpeg"
+        except Exception:
+            buffered = BytesIO()
+            image.save(buffered, format="PNG")
+            mime = "image/png"
+
+        b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        return f"data:{mime};base64,{b64}"
+
+    # -----------------------------
+    # vision prompt
+    # -----------------------------
+    def _vision_prompt(self, image, prompt=None):
+        text = prompt or (
+            "请详细描述图片内容，包括人物、场景、时间、事件以及可见的文字或数据。"
+            if self.lang.lower() == "chinese"
+            else "Describe the image in detail."
+        )
+
+        image_url = (
+            image if isinstance(image, str) and image.startswith("data:")
+            else f"data:image/png;base64,{image}"
+        )
+
+        return [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": text
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": image_url}
+                }
+            ]
+        }]
+
+    # -----------------------------
+    # core request
+    # -----------------------------
+    def _describe(self, messages):
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": 0.2
+        }
+
+        resp = requests.post(
+            self.endpoint,
+            headers=self.headers,
+            json=payload,
+            timeout=60
+        )
+
+        try:
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            raise RuntimeError(f"Vision API failed at {self.endpoint}: {e}; response={resp.text}") from e
+
+        try:
+            result = data["choices"][0]["message"]["content"].strip()
+        except Exception:
+            raise RuntimeError(f"Invalid response: {data}")
+
+        usage = data.get("usage", {}).get("total_tokens", 0)
+
+        return result, usage
+
+    # -----------------------------
+    # public API
+    # -----------------------------
+    def describe(self, image):
+        messages = self._vision_prompt(self.image2base64(image))
+        return self._describe(messages)
+
+    def describe_with_prompt(self, image, prompt=None):
+        messages = self._vision_prompt(
+            self.image2base64(image),
+            prompt
+        )
+        return self._describe(messages)
+
 class LmStudioCV(GptV4):
     _FACTORY_NAME = "LM-Studio"
 

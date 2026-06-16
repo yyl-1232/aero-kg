@@ -1,6 +1,5 @@
 import { EmptyConversationId, MessageType } from '@/constants/chat';
 import { IConversation, IReference } from '@/interfaces/database/chat';
-import { isEmpty } from 'lodash';
 import { IMessage } from '../chat/interface';
 
 export const isConversationIdExist = (conversationId: string) => {
@@ -34,7 +33,11 @@ export const buildMessageItemReference = (
   const referenceIndex = assistantMessages.findIndex(
     (x) => x.id === message.id,
   );
-  const reference = !isEmpty(message?.reference)
+  const hasMessageReference = Object.prototype.hasOwnProperty.call(
+    message ?? {},
+    'reference',
+  );
+  const reference = hasMessageReference
     ? message?.reference
     : (conversation?.reference ?? [])[referenceIndex];
 

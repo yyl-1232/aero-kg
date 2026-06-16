@@ -16,7 +16,7 @@
 import logging
 from tavily import TavilyClient
 from api.utils import get_uuid
-from rag.nlp import rag_tokenizer
+from rag.nlp import normalize_extracted_text, rag_tokenizer
 
 
 class Tavily:
@@ -42,12 +42,14 @@ class Tavily:
         logging.info("[Tavily]Q: " + question)
         for r in self.search(question):
             id = get_uuid()
+            content = normalize_extracted_text(r["content"])
+            title = normalize_extracted_text(r["title"])
             chunks.append({
                 "chunk_id": id,
-                "content_ltks": rag_tokenizer.tokenize(r["content"]),
-                "content_with_weight": r["content"],
+                "content_ltks": rag_tokenizer.tokenize(content),
+                "content_with_weight": content,
                 "doc_id": id,
-                "docnm_kwd": r["title"],
+                "docnm_kwd": title,
                 "kb_id": [],
                 "important_kwd": [],
                 "image_id": "",
@@ -56,13 +58,14 @@ class Tavily:
                 "term_similarity": 0,
                 "vector": [],
                 "positions": [],
-                "url": r["url"]
+                "url": r["url"],
+                "source_type": "web",
             })
             aggs.append({
-                "doc_name": r["title"],
+                "doc_name": title,
                 "doc_id": id,
                 "count": 1,
                 "url": r["url"]
             })
-            logging.info("[Tavily]R: "+r["content"][:128]+"...")
+            logging.info("[Tavily]R: "+content[:128]+"...")
         return {"chunks": chunks, "doc_aggs": aggs}

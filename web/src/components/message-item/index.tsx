@@ -149,6 +149,7 @@ const MessageItem = ({
             {isAssistant && referenceDocumentList.length > 0 && (
               <ReferenceDocumentList
                 list={referenceDocumentList}
+                chunks={reference?.chunks}
               ></ReferenceDocumentList>
             )}
             {isUser && documentList.length > 0 && (

@@ -9,6 +9,8 @@ export interface PromptConfig {
   quote: boolean;
   keyword: boolean;
   refine_multiturn: boolean;
+  tavily_enabled?: boolean;
+  tavily_api_key?: string;
   use_kg: boolean;
   kg_ids?: string[]; // 需要添加这个字段
   kg_similarity_threshold?: number; // 需要添加这个字段
@@ -103,6 +105,7 @@ export interface Message {
 export interface IReferenceChunk {
   id: string;
   content: null;
+  doc_id?: string;
   document_id: string;
   document_name: string;
   dataset_id: string;
@@ -112,6 +115,15 @@ export interface IReferenceChunk {
   term_similarity: number;
   positions: number[];
   doc_type?: string;
+  source_type?: string;
+  kg_id?: string;
+  kg_name?: string;
+  kg_description?: string;
+  kg_node_num?: number;
+  kg_edge_num?: number;
+  kg_entity_name?: string;
+  kg_entity_type?: string;
+  kg_entity_description?: string;
 }
 
 export interface IReference {
@@ -141,6 +153,10 @@ export interface Docagg {
   doc_id: string;
   doc_name: string;
   url?: string;
+  source_type?: string;
+  description?: string;
+  node_num?: number;
+  edge_num?: number;
 }
 
 // interface Chunk {

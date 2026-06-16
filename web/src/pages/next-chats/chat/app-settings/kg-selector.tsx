@@ -267,7 +267,7 @@ export function KgSelector() {
 
       <SliderInputFormField
         name="prompt_config.kg_mining_depth"
-        label="Mining depth"
+        label="探索深度"
         min={1}
         max={10}
         step={1}

@@ -48,6 +48,7 @@ export function ChatSettings({
       refine_multiturn: true,
       system: '',
       parameters: [],
+      tavily_enabled: false,
     }),
     [],
   );
@@ -139,6 +140,9 @@ export function ChatSettings({
         kg_mining_depth:
           data.prompt_config?.kg_mining_depth ??
           defaultPromptConfig.kg_mining_depth,
+        tavily_enabled:
+          data.prompt_config?.tavily_enabled ??
+          Boolean(data.prompt_config?.tavily_api_key),
       },
       meta_data_filter: {
         ...defaultValues.meta_data_filter,

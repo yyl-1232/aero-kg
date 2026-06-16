@@ -6,11 +6,16 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 const Popover = (props: PopoverPrimitive.PopoverProps) => {
-  const { children, open: openState, onOpenChange } = props;
-  const [open, setOpen] = React.useState(true);
+  const { children, open: openState, onOpenChange, ...rest } = props;
+  const isControlled = openState !== undefined;
+  const [open, setOpen] = React.useState(openState ?? false);
+
   React.useEffect(() => {
-    setOpen(!!openState);
-  }, [openState]);
+    if (isControlled) {
+      setOpen(openState);
+    }
+  }, [isControlled, openState]);
+
   const handleOnOpenChange = React.useCallback(
     (e: boolean) => {
       if (onOpenChange) {
@@ -20,8 +25,13 @@ const Popover = (props: PopoverPrimitive.PopoverProps) => {
     },
     [onOpenChange],
   );
+
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={handleOnOpenChange}>
+    <PopoverPrimitive.Root
+      {...rest}
+      open={isControlled ? openState : open}
+      onOpenChange={handleOnOpenChange}
+    >
       {children}
     </PopoverPrimitive.Root>
   );

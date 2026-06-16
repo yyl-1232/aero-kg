@@ -1,8 +1,8 @@
 import Image from '@/components/image';
+import { ReferenceSourceIcon } from '@/components/reference-source-icon';
 import SvgIcon from '@/components/svg-icon';
 import { IReference, IReferenceChunk } from '@/interfaces/database/chat';
 import { getExtension } from '@/utils/document-util';
-import { InfoCircleOutlined } from '@ant-design/icons';
 import DOMPurify from 'dompurify';
 import { memo, useCallback, useEffect, useMemo } from 'react';
 import Markdown from 'react-markdown';
@@ -45,7 +45,9 @@ const styles = {
   referenceImagePreview: 'max-w-[45vw] max-h-[45vh]',
   chunkContentText: 'max-h-[45vh] overflow-y-auto',
   documentLink: 'p-0',
-  referenceIcon: 'px-[6px]',
+  referenceIcon: 'inline-block mx-[6px] align-[-2px] cursor-pointer',
+  referenceButton:
+    'inline-flex items-center p-0 border-0 bg-transparent align-[-2px] cursor-pointer',
   fileThumbnail: 'inline-block max-w-[40px]',
 };
 
@@ -217,7 +219,8 @@ const MarkdownContent = ({
       let replacedText = reactStringReplace(text, currentReg, (match, i) => {
         const chunkIndex = getChunkIndex(match);
 
-        const { imageId, chunkItem, documentId } = getReferenceInfo(chunkIndex);
+        const { imageId, chunkItem, documentId, document } =
+          getReferenceInfo(chunkIndex);
 
         const docType = chunkItem?.doc_type;
 
@@ -238,8 +241,18 @@ const MarkdownContent = ({
           ></Image>
         ) : (
           <Popover>
-            <PopoverTrigger>
-              <InfoCircleOutlined className={styles.referenceIcon} />
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={styles.referenceButton}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ReferenceSourceIcon
+                  chunk={chunkItem}
+                  document={document}
+                  className={styles.referenceIcon}
+                />
+              </button>
             </PopoverTrigger>
             <PopoverContent className="!w-fit">
               {getPopoverContent(chunkIndex)}

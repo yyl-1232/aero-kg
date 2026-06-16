@@ -146,6 +146,9 @@ const ChatConfigurationModal = ({
           kg_similarity_threshold:
             initialDialog.prompt_config?.kg_similarity_threshold ?? 0.3,
           kg_mining_depth: initialDialog.prompt_config?.kg_mining_depth ?? 2,
+          tavily_enabled:
+            initialDialog.prompt_config?.tavily_enabled ??
+            Boolean(initialDialog.prompt_config?.tavily_api_key),
         },
       });
     }

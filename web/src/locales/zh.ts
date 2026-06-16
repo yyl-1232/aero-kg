@@ -593,6 +593,7 @@ General：实体和关系提取提示来自 GitHub - microsoft/graphrag：基于
         '在问答过程中是否启用推理工作流，例如Deepseek-R1或OpenAI o1等模型所采用的方式。启用后，该功能允许模型访问外部知识，并借助思维链推理等技术逐步解决复杂问题。通过将问题分解为可处理的步骤，这种方法增强了模型提供准确回答的能力，从而在需要逻辑推理和多步思考的任务上表现更优。',
       tavilyApiKeyTip:
         '如果 API 密钥设置正确，它将利用 Tavily 进行网络搜索作为文档库的补充。',
+      enableWebSearch: '启用网页搜索',
       tavilyApiKeyMessage: '请输入你的 Tavily API Key',
       tavilyApiKeyHelp: '如何获取？',
       crossLanguage: '跨语言搜索',

@@ -807,13 +807,31 @@ class BaiduYiyanEmbed(Base):
     _FACTORY_NAME = "BaiduYiyan"
 
     def __init__(self, key, model_name, base_url=None):
-        import qianfan
-
-        key = json.loads(key)
-        ak = key.get("yiyan_ak", "")
-        sk = key.get("yiyan_sk", "")
-        self.client = qianfan.Embedding(ak=ak, sk=sk)
         self.model_name = model_name
+        self.base_url = base_url
+        self.api_key = key
+
+        if base_url:
+            # Use OpenAI-compatible API mode
+            if not base_url.endswith("/embeddings"):
+                self.base_url = urljoin(base_url, "/embeddings")
+            else:
+                self.base_url = base_url
+            self.headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+            }
+        else:
+            # Use QianFan native SDK mode
+            import qianfan
+
+            try:
+                key_dict = json.loads(key)
+                ak = key_dict.get("yiyan_ak", "")
+                sk = key_dict.get("yiyan_sk", "")
+                self.client = qianfan.Embedding(ak=ak, sk=sk)
+            except (json.JSONDecodeError, TypeError):
+                self.client = qianfan.Embedding(access_key=key)
 
     def encode(self, texts: list, batch_size=16):
         res = self.client.do(model=self.model_name, texts=texts).body
@@ -835,6 +853,68 @@ class BaiduYiyanEmbed(Base):
         except Exception as _e:
             log_exception(_e, res)
 
+
+class QianFanEmbed(Base):
+    _FACTORY_NAME = "QianFan"
+
+    """
+    Stable QianFan Embedding Client (HTTP version)
+    """
+
+    def __init__(self, key, model_name, base_url=None):
+        self.model_name = model_name
+        self.api_key = key
+
+        self.base_url = self._normalize_base_url(base_url)
+        self.endpoint = urljoin(self.base_url + "/", "embeddings")
+
+        self.headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        }
+
+    @staticmethod
+    def _normalize_base_url(base_url):
+        base_url = (base_url or "https://qianfan.baidubce.com/v2").rstrip("/")
+        for suffix in ("/chat/completions", "/embeddings", "/rerank"):
+            if base_url.endswith(suffix):
+                base_url = base_url[: -len(suffix)].rstrip("/")
+        if base_url == "https://qianfan.baidubce.com":
+            base_url = urljoin(base_url + "/", "v2")
+        return base_url
+
+    def encode(self, texts: list, batch_size=16):
+        token_count = 0
+        embeddings = []
+        for i in range(0, len(texts), batch_size):
+            payload = {
+                "model": self.model_name,
+                "input": texts[i : i + batch_size],
+            }
+
+            resp = requests.post(
+                self.endpoint,
+                headers=self.headers,
+                json=payload,
+                timeout=60,
+            )
+            try:
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as e:
+                raise RuntimeError(f"Embedding API failed at {self.endpoint}: {e}; response={resp.text}") from e
+
+            if "data" not in data:
+                raise RuntimeError(f"Embedding API failed at {self.endpoint}: {data}")
+
+            embeddings.extend([r["embedding"] for r in sorted(data["data"], key=lambda x: x.get("index", 0))])
+            token_count += data.get("usage", {}).get("total_tokens", 0)
+
+        return np.array(embeddings), token_count
+
+    def encode_queries(self, text):
+        embeddings, token_count = self.encode([text])
+        return embeddings[0], token_count
 
 class VoyageEmbed(Base):
     _FACTORY_NAME = "Voyage AI"

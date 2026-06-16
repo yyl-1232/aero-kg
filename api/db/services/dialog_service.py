@@ -33,6 +33,7 @@ from api.db import LLMType, ParserType, StatusEnum, TenantPermission
 from api.db.db_models import DB, Dialog
 from api.db.services.common_service import CommonService
 from api.db.services.document_service import DocumentService
+from api.db.services.file_service import FileService
 from api.db.services.knowledge_graph_service import KnowledgeGraphService
 from api.db.services.knowledgebase_service import KnowledgebaseService
 from api.db.services.langfuse_service import TenantLangfuseService
@@ -253,6 +254,159 @@ def _knowledge_graph_readable(kg_id, user_id):
     return graphs.exists()
 
 
+def _safe_float(value, default=0.0):
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value, default=0):
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _chunk_source(chunk):
+    source_type = chunk.get("source_type")
+    if source_type == "knowledge_graph":
+        return "knowledge_graph"
+    if source_type in {"web", "web_knowledge"}:
+        return "web"
+    return "document"
+
+
+def _strip_graph_file_name(name):
+    name = (name or "").strip()
+    if name.lower().endswith(".json"):
+        name = name[:-5]
+    if name.lower().endswith("_新"):
+        name = name[:-2]
+    return name.strip()
+
+
+def _is_placeholder_graph_name(name):
+    name = (name or "").strip()
+    return not name or name.lower() in {"unknown", "knowledge graph", "knowledge_graph"}
+
+
+def _knowledge_graph_original_file_name(kg):
+    for file_id in kg.file_ids or []:
+        ok, file = FileService.get_by_id(file_id)
+        if not ok or not file:
+            continue
+        name = _strip_graph_file_name(file.name)
+        if name and not _is_placeholder_graph_name(name):
+            return name
+    return ""
+
+
+def _knowledge_graph_hit_entity_name(kg_result):
+    entities = kg_result.get("entities") or []
+    if entities:
+        return (entities[0].get("entity_name") or "").strip()
+    chunks = kg_result.get("chunks") or []
+    if chunks:
+        entity = chunks[0].get("entity") or {}
+        return (entity.get("entity_name") or "").strip()
+    return ""
+
+
+def _knowledge_graph_reference_info(kg_id, kg, kg_result):
+    graph_nodes = kg_result.get("graph_nodes")
+    graph_edges = kg_result.get("graph_edges")
+    node_num = len(graph_nodes) if isinstance(graph_nodes, list) else (kg.node_num or 0)
+    edge_num = len(graph_edges) if isinstance(graph_edges, list) else (kg.edge_num or 0)
+    name_candidates = [
+        kg.name,
+        kg_result.get("graph_name") or "",
+        _knowledge_graph_original_file_name(kg),
+        _knowledge_graph_hit_entity_name(kg_result),
+    ]
+    name = next((item for item in name_candidates if item and not _is_placeholder_graph_name(item)), "")
+    if not name:
+        name = next((item for item in name_candidates if item), "Knowledge Graph")
+    return {
+        "id": kg_id,
+        "name": name,
+        "description": kg.description or "",
+        "node_num": node_num,
+        "edge_num": edge_num,
+    }
+
+
+def _chunk_rank_key(chunk):
+    return (
+        _safe_float(chunk.get("similarity")),
+        _safe_float(chunk.get("vector_similarity")),
+        _safe_float(chunk.get("term_similarity")),
+    )
+
+
+def _source_limit(prompt_config, keys, default):
+    for key in keys:
+        if key in prompt_config:
+            return max(0, _safe_int(prompt_config.get(key), default))
+    return max(0, default)
+
+
+def _sort_retrieval_chunks_by_source(chunks, prompt_config, doc_similarity_threshold, default_top_n):
+    thresholds = {
+        "knowledge_graph": _safe_float(prompt_config.get("kg_similarity_threshold", 0.3)),
+        "document": _safe_float(doc_similarity_threshold),
+        "web": _safe_float(
+            prompt_config.get(
+                "web_similarity_threshold",
+                prompt_config.get("tavily_similarity_threshold", 0),
+            )
+        ),
+    }
+    limits = {
+        "knowledge_graph": _source_limit(prompt_config, ["kg_top_n", "kg_node_top_n"], default_top_n),
+        "document": _source_limit(prompt_config, ["document_top_n", "doc_top_n"], default_top_n),
+        "web": _source_limit(prompt_config, ["web_top_n", "tavily_top_n"], min(default_top_n, 6)),
+    }
+    grouped = {"knowledge_graph": [], "document": [], "web": [], "other": []}
+    for chunk in chunks:
+        if not chunk.get("content_with_weight") and not chunk.get("content"):
+            continue
+        source = _chunk_source(chunk)
+        if source in thresholds and _safe_float(chunk.get("similarity")) < thresholds[source]:
+            continue
+        grouped[source if source in grouped else "other"].append(chunk)
+
+    for group in grouped.values():
+        group.sort(key=_chunk_rank_key, reverse=True)
+
+    return (
+        grouped["knowledge_graph"][:limits["knowledge_graph"]]
+        + grouped["document"][:limits["document"]]
+        + grouped["web"][:limits["web"]]
+        + grouped["other"]
+    )
+
+
+def _filter_doc_aggs_by_chunks(doc_aggs, chunks):
+    doc_ids = {chunk.get("doc_id") or chunk.get("document_id") for chunk in chunks}
+    doc_ids.discard(None)
+    if not doc_ids:
+        return []
+    seen = set()
+    filtered = []
+    for doc in doc_aggs:
+        doc_id = doc.get("doc_id") or doc.get("document_id")
+        if doc_id not in doc_ids or doc_id in seen:
+            continue
+        seen.add(doc_id)
+        filtered.append(doc)
+    return filtered
+
+
 BAD_CITATION_PATTERNS = [
     re.compile(r"\(\s*ID\s*[: ]*\s*(\d+)\s*\)"),  # (ID: 12)
     re.compile(r"\[\s*ID\s*[: ]*\s*(\d+)\s*\]"),  # [ID: 12]
@@ -341,11 +495,12 @@ def meta_filter(metas: dict, filters: list[dict]):
 
 def chat(dialog, messages, stream=True,user_id=None, **kwargs):
     assert messages[-1]["role"] == "user", "The last content of this conversation is not from user."
+    tavily_enabled = dialog.prompt_config.get("tavily_enabled", True) and dialog.prompt_config.get("tavily_api_key")
     has_knowledge_graph = bool(
         dialog.prompt_config.get("use_kg")
         and dialog.prompt_config.get("kg_ids")
     )
-    if not dialog.kb_ids and not dialog.prompt_config.get("tavily_api_key") and not has_knowledge_graph:
+    if not dialog.kb_ids and not tavily_enabled and not has_knowledge_graph:
         for ans in chat_solo(dialog, messages, stream):
             yield ans
         return
@@ -475,9 +630,13 @@ def chat(dialog, messages, stream=True,user_id=None, **kwargs):
                     rerank_mdl=rerank_mdl,
                     rank_feature=label_question(" ".join(questions), kbs),
                 )
-            if prompt_config.get("tavily_api_key"):
+            if prompt_config.get("tavily_enabled", True) and prompt_config.get("tavily_api_key"):
                 tav = Tavily(prompt_config["tavily_api_key"])
                 tav_res = tav.retrieve_chunks(" ".join(questions))
+                for chunk in tav_res["chunks"]:
+                    chunk["source_type"] = "web"
+                for doc in tav_res["doc_aggs"]:
+                    doc["source_type"] = "web"
                 kbinfos["chunks"].extend(tav_res["chunks"])
                 kbinfos["doc_aggs"].extend(tav_res["doc_aggs"])
             if prompt_config.get("use_kg"):
@@ -486,7 +645,6 @@ def chat(dialog, messages, stream=True,user_id=None, **kwargs):
                         logging.warning("Skip unreadable knowledge graph in chat retrieval: %s", kg_id)
                         continue
                     e, kg = KnowledgeGraphService.get_by_id(kg_id)
-                    kg_name = kg.name if e else "Unknown"
                     if not e:
                         continue
                     kg_result = Neo4jKnowledgeGraphService.retrieval_test(
@@ -495,12 +653,36 @@ def chat(dialog, messages, stream=True,user_id=None, **kwargs):
                         similarity_threshold=prompt_config.get("kg_similarity_threshold", 0.3),
                         subgraph_depth=prompt_config.get("kg_mining_depth", 2),
                     )
-                    if kg_result.get("content_with_weight"):
-                        kg_result["kg_id"] = kg_id
-                        kg_result["kg_name"] = kg_name
-                        kg_result["source_type"] = "knowledge_graph"
-                        kbinfos["chunks"].insert(0, kg_result)
+                    kg_reference = _knowledge_graph_reference_info(kg_id, kg, kg_result)
+                    kg_chunks = kg_result.get("chunks") or []
+                    if not kg_chunks and kg_result.get("content_with_weight"):
+                        kg_chunks = [kg_result]
+                    for kg_chunk in kg_chunks:
+                        kg_chunk["kg_id"] = kg_id
+                        kg_chunk["kg_name"] = kg_reference["name"]
+                        kg_chunk["kg_description"] = kg_reference["description"]
+                        kg_chunk["kg_node_num"] = kg_reference["node_num"]
+                        kg_chunk["kg_edge_num"] = kg_reference["edge_num"]
+                        kg_chunk["source_type"] = "knowledge_graph"
+                    if kg_chunks:
+                        kbinfos["chunks"].extend(kg_chunks)
+                        kbinfos["doc_aggs"].append({
+                            "doc_name": kg_reference["name"],
+                            "doc_id": f"kg-{kg_id}",
+                            "count": len(kg_chunks),
+                            "source_type": "knowledge_graph",
+                            "description": kg_reference["description"],
+                            "node_num": kg_reference["node_num"],
+                            "edge_num": kg_reference["edge_num"],
+                        })
 
+            kbinfos["chunks"] = _sort_retrieval_chunks_by_source(
+                kbinfos["chunks"],
+                prompt_config,
+                dialog.similarity_threshold,
+                dialog.top_n,
+            )
+            kbinfos["doc_aggs"] = _filter_doc_aggs_by_chunks(kbinfos["doc_aggs"], kbinfos["chunks"])
             knowledges = kb_prompt(kbinfos, max_tokens)
 
     logging.debug("{}->{}".format(" ".join(questions), "\n->".join(knowledges)))
@@ -613,9 +795,17 @@ def chat(dialog, messages, stream=True,user_id=None, **kwargs):
             input={"prompt": prompt, "prompt4citation": prompt4citation, "messages": msg}
         )
 
+    def streaming_reference():
+        refs = deepcopy(kbinfos)
+        for c in refs.get("chunks", []):
+            if c.get("vector"):
+                del c["vector"]
+        return refs
+
     if stream:
         last_ans = ""
         answer = ""
+        refs = streaming_reference()
         for ans in chat_mdl.chat_streamly(prompt + prompt4citation, msg[1:], gen_conf):
             if thought:
                 ans = re.sub(r"^.*</think>", "", ans, flags=re.DOTALL)
@@ -624,10 +814,10 @@ def chat(dialog, messages, stream=True,user_id=None, **kwargs):
             if num_tokens_from_string(delta_ans) < 16:
                 continue
             last_ans = answer
-            yield {"answer": thought + answer, "reference": {}, "audio_binary": tts(tts_mdl, delta_ans)}
+            yield {"answer": thought + answer, "reference": refs, "audio_binary": tts(tts_mdl, delta_ans)}
         delta_ans = answer[len(last_ans):]
         if delta_ans:
-            yield {"answer": thought + answer, "reference": {}, "audio_binary": tts(tts_mdl, delta_ans)}
+            yield {"answer": thought + answer, "reference": refs, "audio_binary": tts(tts_mdl, delta_ans)}
         yield decorate_answer(thought + answer)
     else:
         answer = chat_mdl.chat(prompt + prompt4citation, msg[1:], gen_conf)
