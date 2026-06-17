@@ -33,7 +33,7 @@ services:
       - MACOS=${MACOS-}
     networks:
       - AeroKG
-    restart: on-failure
+    restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
