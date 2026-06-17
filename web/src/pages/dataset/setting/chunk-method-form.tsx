@@ -85,21 +85,16 @@ export function ChunkMethodForm() {
           onClick={() => {
             (async () => {
               try {
-                let beValid = await form.formControl.trigger();
-                if (beValid) {
-                  // setSubmitLoading(true);
-                  // let postData = form.formState.values;
-                  // console.log('submit form -->', form);
-                  // delete postData['avatar']; // has submitted in first form general
-                  form.handleSubmit(async (values) => {
-                    console.log('saveKnowledgeConfiguration: ', values);
-                    delete values['avatar'];
-                    await saveKnowledgeConfiguration({
-                      kb_id,
-                      ...values,
-                    });
-                  })();
+                const beValid = await form.trigger();
+                if (!beValid) {
+                  return;
                 }
+
+                const { avatar, ...values } = form.getValues();
+                await saveKnowledgeConfiguration({
+                  kb_id,
+                  ...values,
+                });
               } catch (e) {
                 console.log(e);
               } finally {
