@@ -74,12 +74,12 @@ class GoogleScholar(ToolBase, ABC):
             try:
                 scholar_client = scholarly.search_pubs(kwargs["query"], patents=self._param.patents, year_low=self._param.year_low,
                                                        year_high=self._param.year_high, sort_by=self._param.sort_by)
-                self._retrieve_chunks(scholar_client,
+                filtered = self._retrieve_chunks(scholar_client,
                                       get_title=lambda r: r['bib']['title'],
                                       get_url=lambda r: r["pub_url"],
                                       get_content=lambda r: "\n author: " + ",".join(r['bib']['author']) + '\n Abstract: ' + r['bib'].get('abstract', 'no abstract')
                                       )
-                self.set_output("json", list(scholar_client))
+                self.set_output("json", filtered)
                 return self.output("formalized_content")
             except Exception as e:
                 last_e = e

@@ -39,6 +39,7 @@ import { IFile } from '@/interfaces/database/file-manager';
 import { cn } from '@/lib/utils';
 import { formatFileSize } from '@/utils/common-util';
 import { formatDate } from '@/utils/date';
+import { windowsExplorerSort } from '@/utils/document-util';
 import { pick } from 'lodash';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -120,6 +121,7 @@ export function FilesTable({
     },
     {
       accessorKey: 'name',
+      sortingFn: windowsExplorerSort,
       header: ({ column }) => {
         return (
           <Button

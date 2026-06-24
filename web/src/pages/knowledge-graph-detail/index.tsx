@@ -145,7 +145,7 @@ const KnowledgeGraphDetail = () => {
           </div>
         </aside>
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 min-h-0 overflow-hidden">
           {activeTab === 'graph-display' && (
             <GraphDisplay kbId={id || ''} kbData={kbData} />
           )}

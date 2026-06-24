@@ -12,6 +12,7 @@ import { useSetDocumentStatus } from '@/hooks/use-document-request';
 import { IDocumentInfo } from '@/interfaces/database/document';
 import { cn } from '@/lib/utils';
 import { formatDate } from '@/utils/date';
+import { windowsExplorerSort } from '@/utils/document-util';
 import { ColumnDef } from '@tanstack/table-core';
 import { ArrowUpDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -62,6 +63,7 @@ export function useDatasetTableColumns({
     },
     {
       accessorKey: 'name',
+      sortingFn: windowsExplorerSort,
       header: ({ column }) => {
         return (
           <Button

@@ -70,11 +70,11 @@ class GitHub(ToolBase, ABC):
                     self._param.top_n)
                 headers = {"Content-Type": "application/vnd.github+json", "X-GitHub-Api-Version": '2022-11-28'}
                 response = requests.get(url=url, headers=headers).json()
-                self._retrieve_chunks(response['items'],
+                filtered = self._retrieve_chunks(response['items'],
                                       get_title=lambda r: r["name"],
                                       get_url=lambda r: r["html_url"],
                                       get_content=lambda r: str(r["description"]) + '\n stars:' + str(r['watchers']))
-                self.set_output("json", response['items'])
+                self.set_output("json", filtered)
                 return self.output("formalized_content")
             except Exception as e:
                 last_e = e

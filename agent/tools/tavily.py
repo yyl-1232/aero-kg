@@ -117,12 +117,12 @@ class TavilySearch(ToolBase, ABC):
                 kwargs["include_images"] = False
                 kwargs["include_raw_content"] = False
                 res = self.tavily_client.search(**kwargs)
-                self._retrieve_chunks(res["results"],
+                filtered = self._retrieve_chunks(res["results"],
                                       get_title=lambda r: r["title"],
                                       get_url=lambda r: r["url"],
                                       get_content=lambda r: r["raw_content"] if r["raw_content"] else r["content"],
                                       get_score=lambda r: r["score"])
-                self.set_output("json", res["results"])
+                self.set_output("json", filtered)
                 return self.output("formalized_content")
             except Exception as e:
                 last_e = e

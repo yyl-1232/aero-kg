@@ -86,21 +86,21 @@ class DuckDuckGo(ToolBase, ABC):
                     with DDGS() as ddgs:
                         # {'title': '', 'href': '', 'body': ''}
                         duck_res = ddgs.text(kwargs["query"], max_results=self._param.top_n)
-                        self._retrieve_chunks(duck_res,
+                        filtered = self._retrieve_chunks(duck_res,
                                               get_title=lambda r: r["title"],
                                               get_url=lambda r: r.get("href", r.get("url")),
                                               get_content=lambda r: r["body"])
-                        self.set_output("json", duck_res)
+                        self.set_output("json", filtered)
                         return self.output("formalized_content")
                 else:
                     with DDGS() as ddgs:
                         # {'date': '', 'title': '', 'body': '', 'url': '', 'image': '', 'source': ''}
                         duck_res = ddgs.news(kwargs["query"], max_results=self._param.top_n)
-                        self._retrieve_chunks(duck_res,
+                        filtered = self._retrieve_chunks(duck_res,
                                               get_title=lambda r: r["title"],
                                               get_url=lambda r: r.get("href", r.get("url")),
                                               get_content=lambda r: r["body"])
-                        self.set_output("json", duck_res)
+                        self.set_output("json", filtered)
                         return self.output("formalized_content")
             except Exception as e:
                 last_e = e

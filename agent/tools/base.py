@@ -27,6 +27,69 @@ from rag.utils.mcp_tool_call_conn import MCPToolCallSession
 from timeit import default_timer as timer
 
 
+def is_chinese_or_english(text: str, threshold: float = 0.3) -> bool:
+    """
+    Check if the given text is primarily in Chinese (simplified/traditional) or English.
+    Returns True if the ratio of Chinese+English characters to total script characters
+    is above the threshold, False otherwise.
+
+    Args:
+        text: The text to check.
+        threshold: Minimum ratio of Chinese+English characters to total script characters.
+                   Default is 0.3, meaning at least 30% of script characters must be
+                   Chinese or English for the text to pass.
+
+    Chinese Unicode ranges:
+        - \\u4e00-\\u9fff: CJK Unified Ideographs (simplified & traditional)
+        - \\u3400-\\u4dbf: CJK Unified Ideographs Extension A
+        - \\uf900-\\ufaff: CJK Compatibility Ideographs
+
+    English: Basic Latin letters a-zA-Z
+    """
+    if not text or not text.strip():
+        return True
+
+    # Count total "script" characters (letters from any language, excluding spaces/numbers/punctuation)
+    # This includes CJK, Latin, Cyrillic, Arabic, Thai, Korean, Japanese, etc.
+    script_pattern = re.compile(
+        r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff'  # Chinese
+        r'\u3040-\u309f\u30a0-\u30ff'                  # Japanese (Hiragana + Katakana)
+        r'\uac00-\ud7af\u1100-\u11ff'                  # Korean
+        r'\u0400-\u04ff'                                # Cyrillic
+        r'\u0600-\u06ff\u0750-\u077f'                  # Arabic
+        r'\u0e00-\u0e7f'                                # Thai
+        r'\u0900-\u097f'                                # Devanagari
+        r'\u0980-\u09ff'                                # Bengali
+        r'\u0a80-\u0aff'                                # Gujarati
+        r'\u0b80-\u0bff'                                # Tamil
+        r'a-zA-Z'                                       # English/Latin
+        r']'
+    )
+    total_script_count = len(script_pattern.findall(text))
+
+    # If no script characters at all (e.g., only numbers/punctuation), allow it
+    if total_script_count == 0:
+        return True
+
+    # Regex patterns for character classification
+    chinese_pattern = re.compile(
+        r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]'
+    )
+    english_pattern = re.compile(r'[a-zA-Z]')
+
+    # Count Chinese and English characters
+    chinese_count = len(chinese_pattern.findall(text))
+    english_count = len(english_pattern.findall(text))
+    zh_en_count = chinese_count + english_count
+
+    # If no Chinese or English characters but there are other script characters, filter out
+    if zh_en_count == 0:
+        return False
+
+    ratio = zh_en_count / total_script_count
+    return ratio >= threshold
+
+
 class ToolParameter(TypedDict):
     type: str
     description: str
@@ -140,14 +203,20 @@ class ToolBase(ComponentBase):
     def _retrieve_chunks(self, res_list: list, get_title, get_url, get_content, get_score=None):
         chunks = []
         aggs = []
+        filtered_res = []
         for r in res_list:
             content = get_content(r)
             if not content:
+                continue
+            # Filter out results that are not in Chinese or English
+            if not is_chinese_or_english(content):
+                logging.info(f"Filtered out non-Chinese/English result: {content[:80]}...")
                 continue
             content = re.sub(r"!?\[[a-z]+\]\(data:image/png;base64,[ 0-9A-Za-z/_=+-]+\)", "", content)
             content = content[:10000]
             if not content:
                 continue
+            filtered_res.append(r)
             id = str(hash_str2int(content))
             title = get_title(r)
             url = get_url(r)
@@ -168,6 +237,7 @@ class ToolBase(ComponentBase):
             })
         self._canvas.add_refernce(chunks, aggs)
         self.set_output("formalized_content", "\n".join(kb_prompt({"chunks": chunks, "doc_aggs": aggs}, 200000, True)))
+        return filtered_res
 
     def thoughts(self) -> str:
         return self._canvas.get_component_name(self._id) + " is running..."

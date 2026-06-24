@@ -134,12 +134,12 @@ class Google(ToolBase, ABC):
         for _ in range(self._param.max_retries+1):
             try:
                 search = GoogleSearch(params).get_dict()
-                self._retrieve_chunks(search["organic_results"],
+                filtered = self._retrieve_chunks(search["organic_results"],
                                       get_title=lambda r: r["title"],
                                       get_url=lambda r: r["link"],
                                       get_content=lambda r: r.get("about_this_result", {}).get("source", {}).get("description", r["snippet"])
                                       )
-                self.set_output("json", search["organic_results"])
+                self.set_output("json", filtered)
                 return self.output("formalized_content")
             except Exception as e:
                 last_e = e
